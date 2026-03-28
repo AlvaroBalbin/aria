@@ -18,6 +18,14 @@ export const metadata: Metadata = {
     description:
       'It knows you. It remembers everything. It takes real actions.',
     type: 'website',
+    url: 'https://aria-wheat.vercel.app',
+    siteName: 'ARIA',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'ARIA - The AI you wear',
+    description:
+      'It knows you. It remembers everything. It takes real actions.',
   },
 }
 

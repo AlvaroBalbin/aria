@@ -25,14 +25,14 @@ const features = [
 
 export default function Features() {
   return (
-    <section className="py-24 md:py-32">
+    <section className="py-24 md:py-32 border-t border-[#1a1a1a]">
       <div className="max-w-6xl mx-auto px-6 md:px-12">
         <p className="text-xs uppercase tracking-[0.25em] text-neutral-500 mb-12 font-mono">
           Why ARIA
         </p>
 
         <div className="border-l-2 border-gold pl-6 mb-20 max-w-3xl">
-          <p className="text-neutral-300 text-lg md:text-xl font-light leading-relaxed">
+          <p className="text-neutral-300 text-xl md:text-2xl font-light leading-relaxed">
             Humane raised{' '}
             <span className="text-[#f0f0f0] font-medium">$230M</span>.
             Rabbit raised{' '}

@@ -5,7 +5,7 @@ export default function Footer() {
         <span className="text-gold text-xs font-mono tracking-[0.25em] uppercase">
           ARIA
         </span>
-        <span className="text-neutral-600 text-xs">
+        <span className="text-neutral-500 text-xs">
           Built at Bath Hackathon 2026
         </span>
       </div>

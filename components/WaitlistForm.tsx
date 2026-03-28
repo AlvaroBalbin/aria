@@ -1,30 +1,60 @@
 'use client'
 
-import { useState, FormEvent } from 'react'
-
-const INITIAL_COUNT = 1247
+import { useState, useEffect, FormEvent } from 'react'
+import { supabase } from '@/lib/supabase'
 
 export default function WaitlistForm() {
   const [email, setEmail] = useState('')
   const [submitted, setSubmitted] = useState(false)
-  const [count, setCount] = useState(INITIAL_COUNT)
+  const [count, setCount] = useState<number | null>(null)
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+  useEffect(() => {
+    supabase
+      .from('waitlist')
+      .select('*', { count: 'exact', head: true })
+      .then(({ count }: { count: number | null }) => {
+        if (count !== null) setCount(count)
+      })
+  }, [])
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       setError('Please enter a valid email address.')
       return
     }
     setError('')
+    setLoading(true)
+
+    const { error: dbError } = await supabase
+      .from('waitlist')
+      .insert({ email })
+
+    setLoading(false)
+
+    if (dbError) {
+      if (dbError.code === '23505') {
+        setError('This email is already on the waitlist.')
+      } else {
+        setError('Something went wrong. Please try again.')
+      }
+      return
+    }
+
     setSubmitted(true)
-    setCount((prev) => prev + 1)
+    setCount((prev) => (prev !== null ? prev + 1 : 1))
   }
 
   return (
     <div className="mt-10">
       <p className="text-sm text-neutral-500 mb-5 font-mono tracking-wide">
-        {count.toLocaleString()} people on the waitlist
+        {count === null ? (
+          <span className="opacity-0">loading</span>
+        ) : (
+          `${count.toLocaleString()} people on the waitlist`
+        )}
       </p>
 
       {submitted ? (
@@ -44,13 +74,15 @@ export default function WaitlistForm() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="your@email.com"
               aria-label="Email address"
-              className="flex-1 bg-[#111111] border border-[#1a1a1a] text-[#f0f0f0] placeholder-neutral-600 px-4 py-3 text-sm focus:outline-none focus:ring-1 focus:ring-gold"
+              disabled={loading}
+              className="flex-1 bg-[#111111] border border-[#1a1a1a] text-[#f0f0f0] placeholder-neutral-600 px-4 py-3 text-sm focus:outline-none focus:ring-1 focus:ring-gold disabled:opacity-50"
             />
             <button
               type="submit"
-              className="bg-gold text-[#080808] px-6 py-3 text-sm font-medium hover:opacity-90 transition-opacity whitespace-nowrap"
+              disabled={loading}
+              className="bg-gold text-[#080808] px-6 py-3 text-sm font-medium hover:opacity-90 transition-opacity whitespace-nowrap disabled:opacity-50"
             >
-              Join waitlist
+              {loading ? 'Joining...' : 'Join waitlist'}
             </button>
           </div>
           {error && (

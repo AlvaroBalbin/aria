@@ -11,7 +11,7 @@ export default function FeatureCard({ number, title, body }: FeatureCardProps) {
         {number}
       </p>
       <h3 className="text-lg font-medium text-[#f0f0f0] mb-3">{title}</h3>
-      <p className="text-neutral-400 text-sm leading-relaxed">{body}</p>
+      <p className="text-neutral-400 text-base leading-relaxed">{body}</p>
     </div>
   )
 }
