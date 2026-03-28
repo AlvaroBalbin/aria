@@ -1,38 +1,61 @@
-import numpy as np
-from faster_whisper import WhisperModel
-from config import WHISPER_MODEL, SAMPLE_RATE
+"""
+Speech-to-text using OpenAI Whisper API.
+Faster and more accurate in noisy environments than local faster-whisper.
+"""
+import io
+import struct
+import os
+import openai
+from config import SAMPLE_RATE
 
-# Load model once at startup
-print(f"Loading Whisper model: {WHISPER_MODEL}")
-_model = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8")
-print("Whisper ready.")
+client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY", ""))
+
+
+def _pcm_to_wav(pcm_bytes: bytes, sample_rate: int = SAMPLE_RATE) -> bytes:
+    """Wrap raw 16-bit PCM bytes in a WAV container (required by Whisper API)."""
+    num_samples = len(pcm_bytes) // 2
+    num_channels = 1
+    bits_per_sample = 16
+    byte_rate = sample_rate * num_channels * bits_per_sample // 8
+    block_align = num_channels * bits_per_sample // 8
+    data_size = len(pcm_bytes)
+    chunk_size = 36 + data_size
+
+    header = struct.pack(
+        "<4sI4s4sIHHIIHH4sI",
+        b"RIFF", chunk_size, b"WAVE",
+        b"fmt ", 16,
+        1,                  # PCM format
+        num_channels,
+        sample_rate,
+        byte_rate,
+        block_align,
+        bits_per_sample,
+        b"data", data_size,
+    )
+    return header + pcm_bytes
 
 
 def transcribe_bytes(pcm_bytes: bytes) -> str:
     """
-    Transcribe raw PCM audio bytes (16-bit, 16kHz, mono) to text.
+    Transcribe raw 16-bit PCM audio (16kHz mono) to text using OpenAI Whisper API.
     Returns empty string if nothing intelligible detected.
     """
-    if len(pcm_bytes) < SAMPLE_RATE * 2 * 0.3:  # less than 0.3 seconds — skip
+    # Need at least 0.5 seconds of audio
+    if len(pcm_bytes) < SAMPLE_RATE * 2 * 0.5:
         return ""
 
-    # Convert bytes → int16 → float32 in [-1.0, 1.0]
-    audio_int16 = np.frombuffer(pcm_bytes, dtype=np.int16)
-    audio_float32 = audio_int16.astype(np.float32) / 32768.0
+    wav_bytes = _pcm_to_wav(pcm_bytes)
+    wav_file = io.BytesIO(wav_bytes)
+    wav_file.name = "audio.wav"  # Whisper API needs a filename with extension
 
-    segments, info = _model.transcribe(
-        audio_float32,
-        language="en",
-        beam_size=1,
-        vad_filter=True,
-        vad_parameters={"min_silence_duration_ms": 300},
-    )
-
-    texts = [seg.text.strip() for seg in segments if seg.text.strip()]
-    return " ".join(texts)
-
-
-def transcribe_file(path: str) -> str:
-    """Transcribe from a wav/mp3 file path."""
-    segments, _ = _model.transcribe(path, beam_size=1, vad_filter=True)
-    return " ".join(seg.text.strip() for seg in segments)
+    try:
+        transcript = client.audio.transcriptions.create(
+            model="whisper-1",
+            file=wav_file,
+            language="en",
+        )
+        return transcript.text.strip()
+    except Exception as e:
+        print(f"Whisper API error: {e}")
+        return ""

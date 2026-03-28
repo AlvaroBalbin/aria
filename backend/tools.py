@@ -1,15 +1,16 @@
 """
-Claude tool implementations.
-Each function is called when Claude decides to use a tool.
+Claude/GPT tool implementations for ARIA.
 """
 import datetime
 import httpx
 from db import save_memory, query_memories, get_transcript, save_reminder, get_all_memories
-from config import BRAVE_API_KEY
+from config import BRAVE_API_KEY, TWITTER_BEARER_TOKEN
 
 
-def search_web(query: str) -> str:
-    """Search the web. Uses Brave Search API if key available, else DuckDuckGo."""
+# ── Web search ────────────────────────────────────────────────────────────────
+
+def search_web(args: dict) -> str:
+    query = args["query"]
     if BRAVE_API_KEY:
         return _brave_search(query)
     return _ddg_search(query)
@@ -23,146 +24,149 @@ def _brave_search(query: str) -> str:
             params={"q": query, "count": 5},
             timeout=10,
         )
-        data = resp.json()
-        results = data.get("web", {}).get("results", [])[:5]
+        results = resp.json().get("web", {}).get("results", [])[:5]
         if not results:
             return "No results found."
-        lines = []
-        for r in results:
-            lines.append(f"- {r.get('title', '')}: {r.get('description', '')}")
-        return "\n".join(lines)
+        return "\n".join(f"- {r.get('title','')}: {r.get('description','')}" for r in results)
     except Exception as e:
         return f"Search failed: {e}"
 
 
 def _ddg_search(query: str) -> str:
-    """DuckDuckGo instant answer fallback (no API key needed)."""
     try:
         resp = httpx.get(
             "https://api.duckduckgo.com/",
-            params={"q": query, "format": "json", "no_html": "1", "skip_disambig": "1"},
-            timeout=10,
-            follow_redirects=True,
+            params={"q": query, "format": "json", "no_html": "1"},
+            timeout=10, follow_redirects=True,
         )
         data = resp.json()
-        abstract = data.get("AbstractText", "")
-        answer = data.get("Answer", "")
-        related = [r.get("Text", "") for r in data.get("RelatedTopics", [])[:3] if "Text" in r]
-        parts = [p for p in [answer, abstract] + related if p]
-        if parts:
-            return "\n".join(parts[:3])
-        return f"No quick answer found for '{query}'. Try a more specific query."
+        parts = [p for p in [data.get("Answer",""), data.get("AbstractText","")] if p]
+        parts += [r.get("Text","") for r in data.get("RelatedTopics",[])[:2] if "Text" in r]
+        return "\n".join(parts[:3]) if parts else f"No quick answer for '{query}'."
     except Exception as e:
         return f"Search failed: {e}"
 
 
-def tool_save_memory(key: str, value: str) -> str:
-    save_memory(key, value)
-    return f"Remembered: {key} = {value}"
+# ── Memory ────────────────────────────────────────────────────────────────────
+
+def save_memory_tool(args: dict) -> str:
+    save_memory(args["key"], args["value"])
+    return f"Remembered: {args['key']} = {args['value']}"
 
 
-def tool_query_memories(query: str) -> str:
-    memories = query_memories(query)
+def query_memories_tool(args: dict) -> str:
+    memories = query_memories(args["query"])
     if not memories:
         return "No relevant memories found."
-    lines = [f"- {m['key']}: {m['value']}" for m in memories]
-    return "\n".join(lines)
+    return "\n".join(f"- {m['key']}: {m['value']}" for m in memories)
 
 
-def tool_get_transcript(minutes: int = 30) -> str:
+# ── Transcript ────────────────────────────────────────────────────────────────
+
+def get_transcript_tool(args: dict) -> str:
+    minutes = args.get("minutes", 30)
     rows = get_transcript(minutes)
     if not rows:
-        return f"No transcript available from the last {minutes} minutes."
-    lines = [f"[{datetime.datetime.fromtimestamp(r['ts']).strftime('%H:%M')}] {r['speaker']}: {r['text']}" for r in rows]
+        return f"No transcript from the last {minutes} minutes."
+    lines = [
+        f"[{datetime.datetime.fromtimestamp(r['ts']).strftime('%H:%M')}] {r['speaker']}: {r['text']}"
+        for r in rows
+    ]
     return "\n".join(lines)
 
 
-def tool_set_reminder(text: str, when_description: str = "") -> str:
-    save_reminder(text)
-    return f"Reminder set: '{text}'" + (f" ({when_description})" if when_description else "")
+# ── Reminders ─────────────────────────────────────────────────────────────────
+
+def set_reminder_tool(args: dict) -> str:
+    save_reminder(args["text"], args.get("when_description", ""))
+    return f"Reminder set: '{args['text']}'"
 
 
-def tool_get_datetime() -> str:
-    now = datetime.datetime.now()
-    return now.strftime("It is %A, %B %d %Y at %H:%M.")
+# ── Date/time ─────────────────────────────────────────────────────────────────
+
+def get_datetime_tool(args: dict) -> str:
+    return datetime.datetime.now().strftime("It is %A, %B %d %Y at %H:%M.")
 
 
-# Maps tool names to functions for brain.py dispatch
+# ── Twitter / X ───────────────────────────────────────────────────────────────
+
+def search_x(args: dict) -> str:
+    """Search X/Twitter for the latest tweets on a topic — real-time world news."""
+    query = args["query"]
+    if not TWITTER_BEARER_TOKEN:
+        return "Twitter Bearer Token not configured."
+    try:
+        import tweepy
+        client = tweepy.Client(bearer_token=TWITTER_BEARER_TOKEN)
+        # Exclude retweets for cleaner results
+        full_query = f"{query} -is:retweet lang:en"
+        resp = client.search_recent_tweets(
+            query=full_query,
+            max_results=10,
+            tweet_fields=["text", "created_at", "author_id"],
+        )
+        if not resp.data:
+            return f"No recent tweets found about '{query}'."
+        lines = [f"- {t.text[:180]}" for t in resp.data[:6]]
+        return f"Latest on X about '{query}':\n" + "\n".join(lines)
+    except Exception as e:
+        return f"X search failed: {e}"
+
+
+# ── Dispatch map ──────────────────────────────────────────────────────────────
+
 TOOL_MAP = {
-    "search_web": lambda args: search_web(args["query"]),
-    "save_memory": lambda args: tool_save_memory(args["key"], args["value"]),
-    "query_memories": lambda args: tool_query_memories(args["query"]),
-    "get_transcript": lambda args: tool_get_transcript(args.get("minutes", 30)),
-    "set_reminder": lambda args: tool_set_reminder(args["text"], args.get("when_description", "")),
-    "get_datetime": lambda args: tool_get_datetime(),
+    "search_web":      search_web,
+    "save_memory":     save_memory_tool,
+    "query_memories":  query_memories_tool,
+    "get_transcript":  get_transcript_tool,
+    "set_reminder":    set_reminder_tool,
+    "get_datetime":    get_datetime_tool,
+    "search_x":        search_x,
 }
 
-# Tool schemas for Claude
-TOOL_SCHEMAS = [
-    {
-        "name": "search_web",
-        "description": "Search the web for current information, news, facts, or any topic.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "query": {"type": "string", "description": "The search query"}
+
+# ── OpenAI tool schemas ───────────────────────────────────────────────────────
+
+def _fn(name, description, properties, required=None):
+    return {
+        "type": "function",
+        "function": {
+            "name": name,
+            "description": description,
+            "parameters": {
+                "type": "object",
+                "properties": properties,
+                "required": required or [],
             },
-            "required": ["query"]
-        }
-    },
-    {
-        "name": "save_memory",
-        "description": "Permanently save an important fact or piece of information about the user or their life.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "key": {"type": "string", "description": "Short label for this memory, e.g. 'user_name', 'user_project'"},
-                "value": {"type": "string", "description": "The value to remember"}
-            },
-            "required": ["key", "value"]
-        }
-    },
-    {
-        "name": "query_memories",
-        "description": "Search your stored memories about the user to answer questions about them.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "query": {"type": "string", "description": "What to search for in memories"}
-            },
-            "required": ["query"]
-        }
-    },
-    {
-        "name": "get_transcript",
-        "description": "Get the recent ambient transcript of what has been said nearby.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "minutes": {"type": "integer", "description": "How many minutes back to retrieve (default 30)", "default": 30}
-            },
-            "required": []
-        }
-    },
-    {
-        "name": "set_reminder",
-        "description": "Set a reminder or note something the user wants to remember to do later.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "text": {"type": "string", "description": "What to remind the user about"},
-                "when_description": {"type": "string", "description": "When (optional, e.g. 'after the hackathon')"}
-            },
-            "required": ["text"]
-        }
-    },
-    {
-        "name": "get_datetime",
-        "description": "Get the current date and time.",
-        "input_schema": {
-            "type": "object",
-            "properties": {},
-            "required": []
-        }
+        },
     }
+
+
+OPENAI_TOOL_SCHEMAS = [
+    _fn("search_web", "Search the web for current info, news, or facts.",
+        {"query": {"type": "string", "description": "Search query"}}, ["query"]),
+
+    _fn("save_memory", "Permanently save an important fact about the user.",
+        {
+            "key":   {"type": "string", "description": "Short label, e.g. 'user_name'"},
+            "value": {"type": "string", "description": "The value to store"},
+        }, ["key", "value"]),
+
+    _fn("query_memories", "Search stored memories about the user.",
+        {"query": {"type": "string", "description": "What to look for"}}, ["query"]),
+
+    _fn("get_transcript", "Get recent ambient transcript of nearby conversation.",
+        {"minutes": {"type": "integer", "description": "Minutes back to fetch (default 30)"}}, []),
+
+    _fn("set_reminder", "Set a reminder for the user.",
+        {
+            "text":             {"type": "string", "description": "What to remind about"},
+            "when_description": {"type": "string", "description": "When (optional)"},
+        }, ["text"]),
+
+    _fn("get_datetime", "Get the current date and time.", {}, []),
+
+    _fn("search_x", "Search X/Twitter for the latest real-time tweets and news on any topic.",
+        {"query": {"type": "string", "description": "Topic to search on X, e.g. 'AI news', 'Bath Hackathon'"}}, ["query"]),
 ]
