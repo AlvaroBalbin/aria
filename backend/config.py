@@ -21,8 +21,11 @@ TWITTER_BEARER_TOKEN        = os.getenv("TWITTER_BEARER_TOKEN", "")
 # ARIA identity
 USER_NAME  = os.getenv("USER_NAME", "Alvaro")
 
+# Supabase
+SUPABASE_URL  = os.getenv("SUPABASE_URL", "")
+SUPABASE_KEY  = os.getenv("SUPABASE_KEY", "")  # service role key (bypasses RLS)
+
 # Server
 HOST        = os.getenv("HOST", "0.0.0.0")
 PORT        = int(os.getenv("PORT", "8000"))
-DB_PATH     = os.getenv("DB_PATH", "aria.db")
 SAMPLE_RATE = 16000

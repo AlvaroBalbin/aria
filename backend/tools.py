@@ -58,7 +58,14 @@ def query_memories_tool(args: dict) -> str:
     memories = query_memories(args["query"])
     if not memories:
         return "No relevant memories found."
-    return "\n".join(f"- {m['key']}: {m['value']}" for m in memories)
+    lines = []
+    for m in memories:
+        try:
+            dt = datetime.datetime.fromtimestamp(m['ts']).strftime('%Y-%m-%d')
+            lines.append(f"- [Saved {dt}] {m['key']}: {m['value']}")
+        except:
+            lines.append(f"- {m['key']}: {m['value']}")
+    return "\n".join(lines)
 
 
 # ── Transcript ────────────────────────────────────────────────────────────────
@@ -147,14 +154,14 @@ OPENAI_TOOL_SCHEMAS = [
     _fn("search_web", "Search the web for current info, news, or facts.",
         {"query": {"type": "string", "description": "Search query"}}, ["query"]),
 
-    _fn("save_memory", "Permanently save an important fact about the user.",
+    _fn("save_memory", "Save an important fact. Call this IMMEDIATELY when you learn something new — a name, plan, preference, decision, or emotion. Do not wait or ask permission.",
         {
-            "key":   {"type": "string", "description": "Short label, e.g. 'user_name'"},
-            "value": {"type": "string", "description": "The value to store"},
+            "key":   {"type": "string", "description": "Specific searchable label with category prefix, e.g. '[person] alvaro_brother_marco', '[plan] hackathon_demo_deadline', '[preference] favourite_programming_language'"},
+            "value": {"type": "string", "description": "Complete natural-language sentence describing the fact"},
         }, ["key", "value"]),
 
-    _fn("query_memories", "Search stored memories about the user.",
-        {"query": {"type": "string", "description": "What to look for"}}, ["query"]),
+    _fn("query_memories", "Search stored memories. ALWAYS call this before answering personal questions — about people, plans, preferences, or past events.",
+        {"query": {"type": "string", "description": "What to search for — use names, topics, or keywords"}}, ["query"]),
 
     _fn("get_transcript", "Get recent ambient transcript of nearby conversation.",
         {"minutes": {"type": "integer", "description": "Minutes back to fetch (default 30)"}}, []),

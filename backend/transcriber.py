@@ -36,6 +36,24 @@ def _pcm_to_wav(pcm_bytes: bytes, sample_rate: int = SAMPLE_RATE) -> bytes:
     return header + pcm_bytes
 
 
+def transcribe_webm(webm_bytes: bytes) -> str:
+    """Transcribe webm/opus audio from browser MediaRecorder to text."""
+    if len(webm_bytes) < 1000:
+        return ""
+    audio_file = io.BytesIO(webm_bytes)
+    audio_file.name = "audio.webm"
+    try:
+        transcript = client.audio.transcriptions.create(
+            model="whisper-1",
+            file=audio_file,
+            language="en",
+        )
+        return transcript.text.strip()
+    except Exception as e:
+        print(f"Whisper API error: {e}")
+        return ""
+
+
 def transcribe_bytes(pcm_bytes: bytes) -> str:
     """
     Transcribe raw 16-bit PCM audio (16kHz mono) to text using OpenAI Whisper API.

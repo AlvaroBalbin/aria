@@ -1,58 +1,119 @@
 """
-Text-to-speech: ElevenLabs (voice clone) → espeak fallback.
-Uses ElevenLabs SDK v1 API correctly for Raspberry Pi 5.
+Text-to-speech: ElevenLabs (voice clone) with browser audio return.
 """
+import io
+import os
+import re
 import subprocess
 import tempfile
-import os
+from pathlib import Path
 from config import ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID
 
+# Runtime voice ID — can be updated without restart
+_active_voice_id: str = ELEVENLABS_VOICE_ID
 
-def speak(text: str) -> None:
+
+def get_active_voice_id() -> str:
+    return _active_voice_id
+
+
+TTS_CHAR_LIMIT = 200
+
+
+def synthesize(text: str) -> bytes | None:
+    """Generate TTS audio as MP3 bytes. Returns None if TTS unavailable."""
     if not text.strip():
-        return
-    if ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID:
-        _speak_elevenlabs(text)
-    else:
-        _speak_espeak(text)
-
-
-def _speak_elevenlabs(text: str) -> None:
+        return None
+    if not ELEVENLABS_API_KEY or not _active_voice_id:
+        return None
+    # Truncate to save credits — cut at last sentence boundary within limit
+    if len(text) > TTS_CHAR_LIMIT:
+        truncated = text[:TTS_CHAR_LIMIT]
+        for sep in ['. ', '! ', '? ']:
+            idx = truncated.rfind(sep)
+            if idx > 0:
+                truncated = truncated[:idx + 1]
+                break
+        text = truncated
     try:
         from elevenlabs.client import ElevenLabs
         client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
-
-        # SDK v1: text_to_speech.convert returns a generator of bytes chunks
         audio_stream = client.text_to_speech.convert(
             text=text,
-            voice_id=ELEVENLABS_VOICE_ID,
+            voice_id=_active_voice_id,
             model_id="eleven_turbo_v2_5",
             output_format="mp3_44100_128",
         )
-        audio_bytes = b"".join(audio_stream)
+        return b"".join(audio_stream)
+    except Exception as e:
+        print(f"ElevenLabs synthesize failed: {e}")
+        return None
 
-        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
-            f.write(audio_bytes)
-            path = f.name
 
-        # mpg123 is lightweight and available on Pi OS; ffplay works too
-        played = False
-        for player in [["mpg123", "-q", path], ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", path]]:
+def speak(text: str) -> None:
+    """Synthesize and play audio locally (legacy, for pendant mode)."""
+    if not text.strip():
+        return
+    audio = synthesize(text)
+    if audio:
+        _play_mp3_bytes(audio)
+    else:
+        _speak_piper(text)
+
+
+def _play_mp3_bytes(audio: bytes) -> None:
+    """Write MP3 bytes to temp file and play via available player."""
+    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+        f.write(audio)
+        path = f.name
+    try:
+        for player in [
+            ["mpg123", "-q", path],
+            ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", path],
+        ]:
             try:
                 subprocess.run(player, check=True, timeout=30)
-                played = True
-                break
+                return
             except (FileNotFoundError, subprocess.CalledProcessError):
                 continue
-
-        if not played:
-            _speak_espeak(text)
-
+    finally:
         os.unlink(path)
 
-    except Exception as e:
-        print(f"ElevenLabs TTS failed: {e} — falling back to espeak")
+
+def _speak_piper(text: str) -> None:
+    model_path = Path(__file__).parent / "piper_models" / "en_US-lessac-medium.onnx"
+    if not model_path.exists():
         _speak_espeak(text)
+        return
+
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+        path = f.name
+        
+    try:
+        process = subprocess.Popen(
+            ["piper", "--model", str(model_path), "--output_file", path],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        process.communicate(input=text.encode("utf-8"), timeout=15)
+        
+        # Play WAV
+        for player in [
+            ["aplay", path],
+            ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", path],
+        ]:
+            try:
+                subprocess.run(player, check=True, timeout=30)
+                return
+            except (FileNotFoundError, subprocess.CalledProcessError):
+                continue
+    except Exception as e:
+        print(f"Piper TTS failed: {e}")
+        _speak_espeak(text)
+    finally:
+        if os.path.exists(path):
+            os.unlink(path)
 
 
 def _speak_espeak(text: str) -> None:
@@ -62,19 +123,37 @@ def _speak_espeak(text: str) -> None:
         print(f"espeak failed: {e}")
 
 
-def clone_voice(audio_path: str, name: str = "ARIA") -> str | None:
-    """Record 60s of yourself talking, pass the file path here. Prints voice_id to add to .env."""
+def clone_voice(audio_bytes: bytes, name: str = "ARIA", file_ext: str = ".webm") -> str | None:
+    """Clone a voice from audio bytes. Returns voice_id or None."""
+    global _active_voice_id
     if not ELEVENLABS_API_KEY:
-        print("Set ELEVENLABS_API_KEY in .env first")
         return None
     try:
         from elevenlabs.client import ElevenLabs
         client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
-        with open(audio_path, "rb") as f:
-            voice = client.voices.add(name=name, files=[f])
-        print(f"\nVoice cloned!")
-        print(f"Add to .env:  ELEVENLABS_VOICE_ID={voice.voice_id}\n")
-        return voice.voice_id
+        audio_file = io.BytesIO(audio_bytes)
+        audio_file.name = f"voice_sample{file_ext}"
+        voice = client.voices.add(name=name, files=[audio_file])
+        new_id = voice.voice_id
+        _active_voice_id = new_id
+        _update_env_voice_id(new_id)
+        print(f"Voice cloned! ID: {new_id}")
+        return new_id
     except Exception as e:
         print(f"Voice cloning failed: {e}")
         return None
+
+
+def _update_env_voice_id(voice_id: str) -> None:
+    """Write voice_id to .env file for persistence across restarts."""
+    env_path = Path(__file__).parent / ".env"
+    try:
+        if env_path.exists():
+            content = env_path.read_text()
+            if "ELEVENLABS_VOICE_ID=" in content:
+                content = re.sub(r"ELEVENLABS_VOICE_ID=.*", f"ELEVENLABS_VOICE_ID={voice_id}", content)
+            else:
+                content += f"\nELEVENLABS_VOICE_ID={voice_id}\n"
+            env_path.write_text(content)
+    except Exception as e:
+        print(f"Could not update .env: {e}")
