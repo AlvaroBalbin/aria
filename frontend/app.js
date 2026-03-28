@@ -103,13 +103,12 @@ async function sendMessage() {
   addConvoEntry({ speaker: 'User', text, ts });
 
   try {
-    const resp = await fetch('/query', {
+    await fetch('/query', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text }),
     });
-    const data = await resp.json();
-    addConvoEntry({ speaker: 'ARIA', text: data.response, ts: Date.now() / 1000 });
+    // ARIA response comes back via WebSocket broadcast — no need to add here
   } catch (e) {
     console.error('Query failed:', e);
   }
@@ -161,6 +160,49 @@ function drawWave() {
   ctx.stroke();
 
   requestAnimationFrame(drawWave);
+}
+
+// ── Microphone (Web Speech API) ───────────────────────────────────────────────
+
+const micBtn = document.getElementById('mic-btn');
+let recognition = null;
+
+if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  recognition = new SR();
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.lang = 'en-US';
+
+  recognition.onresult = (e) => {
+    const text = e.results[0][0].transcript;
+    document.getElementById('chat-input').value = text;
+    sendMessage();
+  };
+
+  recognition.onend = () => {
+    micBtn.classList.remove('recording');
+    micBtn.textContent = '🎤';
+  };
+
+  recognition.onerror = (e) => {
+    console.error('Speech error:', e.error);
+    micBtn.classList.remove('recording');
+    micBtn.textContent = '🎤';
+  };
+
+  micBtn.addEventListener('click', () => {
+    if (micBtn.classList.contains('recording')) {
+      recognition.stop();
+    } else {
+      micBtn.classList.add('recording');
+      micBtn.textContent = '⏹';
+      recognition.start();
+    }
+  });
+} else {
+  micBtn.title = 'Speech not supported in this browser — use Chrome';
+  micBtn.style.opacity = '0.4';
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────

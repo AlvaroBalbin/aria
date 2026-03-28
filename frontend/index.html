@@ -160,6 +160,27 @@
     }
     #send-btn:hover { background: #7c3aed; }
 
+    #mic-btn {
+      background: #1e1e3e;
+      border: 1px solid #2e2e4e;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 18px;
+      cursor: pointer;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+    #mic-btn.recording {
+      background: #7c3aed;
+      border-color: #a78bfa;
+      box-shadow: 0 0 16px #8b5cf6;
+      animation: micPulse 0.8s ease-in-out infinite;
+    }
+    @keyframes micPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+    }
+
     /* ── Memories panel ── */
     .memory-item {
       padding: 8px 0;
@@ -208,7 +229,8 @@
     <div class="panel-header">ARIA Conversation</div>
     <div class="panel-body" id="convo-panel"></div>
     <div class="chat-input-wrap">
-      <input id="chat-input" type="text" placeholder="Type a message to ARIA…" autocomplete="off">
+      <button id="mic-btn" title="Hold to speak">🎤</button>
+      <input id="chat-input" type="text" placeholder="Type or hold 🎤 to speak…" autocomplete="off">
       <button id="send-btn">Send</button>
     </div>
   </div>
