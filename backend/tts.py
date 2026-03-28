@@ -56,10 +56,24 @@ def _speak_elevenlabs(text: str) -> None:
 
 
 def _speak_espeak(text: str) -> None:
+    # Try multiple espeak locations (Windows installs vary)
+    candidates = [
+        ["espeak", "-s", "150", text],
+        [r"C:\Program Files\eSpeak NG\espeak-ng.exe", "-s", "150", text],
+        [r"C:\Program Files (x86)\eSpeak\command_line\espeak.exe", "-s", "150", text],
+    ]
+    for cmd in candidates:
+        try:
+            subprocess.run(cmd, timeout=15, check=True)
+            return
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            continue
+    # Last resort: Windows built-in TTS via PowerShell
     try:
-        subprocess.run(["espeak", "-s", "150", text], timeout=15)
+        ps = f'Add-Type -AssemblyName System.Speech; (New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak("{text}")'
+        subprocess.run(["powershell", "-Command", ps], timeout=15)
     except Exception as e:
-        print(f"espeak failed: {e}")
+        print(f"TTS completely failed: {e}")
 
 
 def clone_voice(audio_path: str, name: str = "ARIA") -> str | None:

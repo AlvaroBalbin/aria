@@ -38,11 +38,11 @@ def ask(user_text: str) -> str:
     # Agentic loop — max 6 rounds of tool use
     for _ in range(6):
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-5.2",
             messages=messages,
             tools=OPENAI_TOOL_SCHEMAS,
             tool_choice="auto",
-            max_tokens=512,
+            max_completion_tokens=512,
         )
 
         choice = response.choices[0]

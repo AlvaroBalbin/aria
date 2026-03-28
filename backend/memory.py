@@ -20,8 +20,8 @@ def extract_memories_from_transcript(transcript_rows: list[dict]) -> list[dict]:
         return []
     try:
         resp = client.chat.completions.create(
-            model="gpt-4o",
-            max_tokens=512,
+            model="gpt-5.2",
+            max_completion_tokens=512,
             messages=[{
                 "role": "user",
                 "content": f"""Extract 3-5 key facts worth remembering from this conversation.
