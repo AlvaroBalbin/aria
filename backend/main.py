@@ -9,12 +9,13 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from db import init_db, save_transcript, get_transcript, get_all_memories, save_conversation_turn
-from transcriber import transcribe_bytes
+from transcriber import transcribe_bytes, record_and_transcribe
 from brain import ask
 from tts import speak
 from memory import memory_extraction_loop
@@ -34,12 +35,14 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
 # ── Dashboard broadcast ───────────────────────────────────────────────────────
 
 async def broadcast(event: str, data: dict):
     """Push an event to all connected dashboard browsers."""
+    global dashboard_clients
     msg = json.dumps({"event": event, **data})
     dead = set()
     for ws in dashboard_clients:
@@ -110,6 +113,65 @@ async def audio_ws(websocket: WebSocket):
                 elif msg.get("pendant_state"):
                     pendant_state = msg["pendant_state"]
                     await broadcast("pendant_state", {"state": pendant_state})
+
+    except WebSocketDisconnect:
+        print("Pendant disconnected")
+
+
+# ── Pendant control WebSocket (no audio — button only) ───────────────────────
+
+@app.websocket("/ws/pendant")
+async def pendant_ws(websocket: WebSocket):
+    """
+    Pendant connects here. On button_press:
+      1. Pi records from AirPods/system mic (arecord)
+      2. Transcribes → Claude → TTS
+      3. Sends state updates back to pendant LEDs + OLED
+    """
+    await websocket.accept()
+    print("Pendant connected on /ws/pendant")
+
+    async def send_state(state: str):
+        try:
+            await websocket.send_text(json.dumps({"state": state}))
+            await broadcast("pendant_state", {"state": state})
+        except Exception:
+            pass
+
+    try:
+        while True:
+            data = await websocket.receive_text()
+            msg = json.loads(data)
+
+            if msg.get("event") == "button_press":
+                print("Button pressed — starting recording")
+                await send_state("listening")
+
+                loop = asyncio.get_event_loop()
+
+                # Record from AirPods mic (blocking — run in thread)
+                text = await loop.run_in_executor(None, record_and_transcribe)
+
+                if not text.strip():
+                    print("Nothing heard.")
+                    await send_state("idle")
+                    continue
+
+                print(f"Heard: {text}")
+                save_transcript(text, speaker="User")
+                await broadcast("transcript", {"speaker": "User", "text": text, "ts": time.time()})
+                await send_state("processing")
+
+                # Claude response
+                response = await loop.run_in_executor(None, ask, text)
+                print(f"ARIA: {response}")
+                save_transcript(response, speaker="ARIA")
+                await broadcast("transcript", {"speaker": "ARIA", "text": response, "ts": time.time()})
+                await send_state("speaking")
+
+                # Speak (ElevenLabs → AirPods)
+                await loop.run_in_executor(None, speak, response)
+                await send_state("idle")
 
     except WebSocketDisconnect:
         print("Pendant disconnected")
