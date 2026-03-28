@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ARIA</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0a0a0f;
+      color: #e8e8f0;
+      font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 32px;
+      border-bottom: 1px solid #1e1e2e;
+    }
+
+    .logo {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 4px;
+      color: #a78bfa;
+    }
+
+    #status-badge {
+      font-size: 12px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 1px solid #2e2e4e;
+      color: #6b7280;
+      transition: all 0.3s ease;
+    }
+    #status-badge.listening  { border-color: #8b5cf6; color: #a78bfa; box-shadow: 0 0 12px #8b5cf640; }
+    #status-badge.processing { border-color: #6366f1; color: #818cf8; box-shadow: 0 0 12px #6366f140; }
+    #status-badge.speaking   { border-color: #10b981; color: #34d399; box-shadow: 0 0 12px #10b98140; }
+
+    #memory-count {
+      font-size: 12px;
+      color: #4b5563;
+    }
+
+    /* ── Waveform ── */
+    #waveform-wrap {
+      padding: 20px 32px 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 80px;
+    }
+
+    canvas#wave {
+      width: 100%;
+      max-width: 900px;
+      height: 60px;
+    }
+
+    /* ── Main panels ── */
+    .panels {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      flex: 1;
+      gap: 1px;
+      overflow: hidden;
+      background: #1a1a2e;
+    }
+
+    .panel {
+      background: #0a0a0f;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      padding: 12px 20px;
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #4b5563;
+      border-bottom: 1px solid #1a1a2e;
+      flex-shrink: 0;
+    }
+
+    .panel-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 20px;
+      scroll-behavior: smooth;
+    }
+
+    .panel-body::-webkit-scrollbar { width: 4px; }
+    .panel-body::-webkit-scrollbar-thumb { background: #2e2e4e; border-radius: 2px; }
+
+    /* ── Transcript entries ── */
+    .entry {
+      margin-bottom: 14px;
+      animation: fadeIn 0.3s ease;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
+
+    .entry-time { font-size: 10px; color: #374151; margin-bottom: 3px; }
+
+    .entry-bubble {
+      display: inline-block;
+      padding: 8px 14px;
+      border-radius: 12px;
+      font-size: 14px;
+      line-height: 1.5;
+      max-width: 95%;
+    }
+
+    .entry.user   .entry-bubble { background: #1e1e3e; color: #c4c4d8; border-bottom-left-radius: 4px; }
+    .entry.aria   .entry-bubble { background: #1a2e2a; color: #a7f3d0; border-bottom-left-radius: 4px; }
+    .entry.user   .entry-speaker { color: #6366f1; font-size: 11px; margin-bottom: 2px; }
+    .entry.aria   .entry-speaker { color: #10b981; font-size: 11px; margin-bottom: 2px; }
+
+    /* ── Chat input ── */
+    .chat-input-wrap {
+      padding: 12px 20px;
+      border-top: 1px solid #1a1a2e;
+      display: flex;
+      gap: 10px;
+    }
+
+    #chat-input {
+      flex: 1;
+      background: #111120;
+      border: 1px solid #2e2e4e;
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: #e8e8f0;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    #chat-input:focus { border-color: #8b5cf6; }
+
+    #send-btn {
+      background: #8b5cf6;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 20px;
+      color: white;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    #send-btn:hover { background: #7c3aed; }
+
+    /* ── Memories panel ── */
+    .memory-item {
+      padding: 8px 0;
+      border-bottom: 1px solid #1a1a2e;
+      font-size: 13px;
+    }
+    .memory-key { color: #8b5cf6; font-size: 11px; margin-bottom: 2px; }
+    .memory-val { color: #9ca3af; }
+
+    /* ── Glow overlay when speaking ── */
+    body.speaking::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(ellipse at center, #10b98108 0%, transparent 70%);
+      animation: glowPulse 1.5s ease-in-out infinite;
+    }
+    @keyframes glowPulse {
+      0%, 100% { opacity: 0.4; }
+      50%       { opacity: 1;   }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">ARIA</div>
+  <div id="status-badge">IDLE</div>
+  <div id="memory-count">0 memories</div>
+</header>
+
+<div id="waveform-wrap">
+  <canvas id="wave" width="900" height="60"></canvas>
+</div>
+
+<div class="panels">
+  <!-- Left: ambient transcript -->
+  <div class="panel">
+    <div class="panel-header">Live Transcript</div>
+    <div class="panel-body" id="transcript-panel"></div>
+  </div>
+
+  <!-- Right: conversation + chat -->
+  <div class="panel">
+    <div class="panel-header">ARIA Conversation</div>
+    <div class="panel-body" id="convo-panel"></div>
+    <div class="chat-input-wrap">
+      <input id="chat-input" type="text" placeholder="Type a message to ARIA…" autocomplete="off">
+      <button id="send-btn">Send</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+.env
+*.db
+__pycache__/
+.venv/
+backend/piper_models/
+*.wav
+*.mp3
+.claude/
