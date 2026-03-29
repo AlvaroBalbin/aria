@@ -73,6 +73,7 @@ void onWebSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
 // ── State management ──────────────────────────────────────────────────────────
 void setState(State s) {
   currentState = s;
+  lastStateChange = millis();
   Serial.print("State -> ");
   Serial.println(s == IDLE ? "IDLE" : s == LISTENING ? "LISTENING" : s == PROCESSING ? "PROCESSING" : "SPEAKING");
 }
@@ -117,6 +118,7 @@ void setup() {
 }
 
 unsigned long lastDisplayUpdate = 0;
+unsigned long lastStateChange = 0;
 bool buttonWasPressed = false;
 
 void loop() {
@@ -137,6 +139,13 @@ void loop() {
     }
   }
   buttonWasPressed = buttonPressed;
+
+  // Timeout: if stuck in non-idle state for >90s, reset to idle
+  if (currentState != IDLE && (millis() - lastStateChange > 90000)) {
+    Serial.println("State timeout — resetting to IDLE");
+    lastText = "";
+    setState(IDLE);
+  }
 
   // Update display + LEDs at ~30fps
   if (millis() - lastDisplayUpdate > 33) {

@@ -283,13 +283,12 @@ async def pendant_ws(websocket: WebSocket):
                     await start_session()
 
     except WebSocketDisconnect:
-        print("Pendant disconnected")
+        print("Pendant disconnected (session continues if active)")
         active_pendant_ws = None
-        await stop_session()
+        # DON'T stop session — audio goes through headphones, not pendant
     except Exception as e:
         print(f"Pendant handler crashed: {e}")
         active_pendant_ws = None
-        await stop_session()
 
 
 # ── Dashboard WebSocket ───────────────────────────────────────────────────────
