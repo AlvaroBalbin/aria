@@ -9,12 +9,12 @@ const features = [
   {
     number: '02',
     title: 'Agentic AI',
-    body: 'Searches the web, saves facts, retrieves context, sets reminders. ARIA does not just answer questions. It takes real actions on your behalf.',
+    body: 'Searches the web, saves facts, retrieves context, sets reminders. Sits on your desk and takes real actions on your behalf.',
   },
   {
     number: '03',
     title: 'Voice identity',
-    body: 'Responds in your own cloned voice. Not a robot. Not a generic assistant. You, distilled. Open-source TTS you control entirely.',
+    body: 'Powered by OpenAI Realtime API, ARIA speaks with ultra-low latency in a voice that sounds genuinely human. No delays. No robotic tone. A real conversation.',
   },
   {
     number: '04',

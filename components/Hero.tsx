@@ -9,7 +9,7 @@ export default function Hero() {
         </p>
 
         <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-light tracking-tight leading-none text-[#f0f0f0] max-w-4xl">
-          The AI you wear.
+          The AI that lives on your desk.
         </h1>
 
         <p className="text-lg md:text-xl text-neutral-400 font-light mt-6 max-w-xl leading-relaxed">
