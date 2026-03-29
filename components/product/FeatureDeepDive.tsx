@@ -3,6 +3,7 @@ interface FeatureDeepDiveProps {
   title: string
   body: string
   imagePosition: 'left' | 'right'
+  imageSrc?: string
 }
 
 export default function FeatureDeepDive({
@@ -10,8 +11,15 @@ export default function FeatureDeepDive({
   title,
   body,
   imagePosition,
+  imageSrc,
 }: FeatureDeepDiveProps) {
-  const image = (
+  const image = imageSrc ? (
+    <img
+      src={imageSrc}
+      alt={title}
+      className="w-full aspect-square object-cover border border-[#1a1a1a]"
+    />
+  ) : (
     <div className="w-full aspect-square bg-[#111111] border border-[#1a1a1a] flex items-center justify-center flex-shrink-0">
       <span className="text-neutral-700 text-xs font-mono tracking-widest uppercase">
         Product image

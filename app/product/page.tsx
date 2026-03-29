@@ -31,18 +31,21 @@ export default function ProductPage() {
         title="Ambient memory"
         body="Always listening, always building context. ARIA knows what you worked on, who you spoke to, and what you decided, before you even ask."
         imagePosition="right"
+        imageSrc="/image2.jpeg"
       />
       <FeatureDeepDive
         number="02"
         title="Agentic AI"
         body="Searches the web with Brave Search, saves facts, sets reminders, retrieves context, and posts to social media. ARIA does not just answer. It acts."
         imagePosition="left"
+        imageSrc="/image1.jpeg"
       />
       <FeatureDeepDive
         number="03"
         title="Voice identity"
         body="Powered by OpenAI Realtime API, ARIA speaks with ultra-low latency in a voice that sounds genuinely human. No delays. No robotic tone. A real conversation."
         imagePosition="right"
+        imageSrc="/image3.jpeg"
       />
 
       <CompetitorCallout />
