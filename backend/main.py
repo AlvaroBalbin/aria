@@ -62,8 +62,14 @@ async def broadcast(event: str, data: dict):
 
 # ── Pendant helpers ──────────────────────────────────────────────────────────
 
+_last_pendant_state = ""
+
 async def send_pendant_state(state: str):
-    """Send state to pendant + dashboard."""
+    """Send state to pendant + dashboard. Debounces duplicate states."""
+    global _last_pendant_state
+    if state == _last_pendant_state:
+        return
+    _last_pendant_state = state
     if active_pendant_ws:
         try:
             await active_pendant_ws.send_text(json.dumps({"state": state}))

@@ -145,6 +145,7 @@ async def realtime_session(state_callback, mic_device="pulse", stop_event: async
     all_user = []
     all_assistant = []
     current_turn_text = ""
+    _last_state = ""
 
     async def emit(event_type, **data):
         if on_event:
@@ -182,9 +183,9 @@ async def realtime_session(state_callback, mic_device="pulse", stop_event: async
                     "output_audio_format": "pcm16",
                     "turn_detection": {
                         "type": "server_vad",
-                        "threshold": 0.5,
-                        "prefix_padding_ms": 300,
-                        "silence_duration_ms": 800,
+                        "threshold": 0.6,
+                        "prefix_padding_ms": 400,
+                        "silence_duration_ms": 1200,
                     },
                     "input_audio_transcription": {"model": "whisper-1"},
                     "tools": RT_TOOLS,
@@ -233,7 +234,7 @@ async def realtime_session(state_callback, mic_device="pulse", stop_event: async
 
                 if t == "input_audio_buffer.speech_started":
                     print("Realtime: user speaking...")
-                    await state_callback("listening")
+                    # Don't change state — already listening
 
                 elif t == "input_audio_buffer.speech_stopped":
                     print("Realtime: user stopped")
@@ -248,7 +249,9 @@ async def realtime_session(state_callback, mic_device="pulse", stop_event: async
                         await emit("transcript", speaker="User", text=transcript)
 
                 elif t in ("response.audio.delta", "response.output_audio.delta"):
-                    await state_callback("speaking")
+                    if _last_state != "speaking":
+                        await state_callback("speaking")
+                        _last_state = "speaking"
                     chunk = base64.b64decode(event["delta"])
                     try:
                         player.stdin.write(chunk)
@@ -291,6 +294,7 @@ async def realtime_session(state_callback, mic_device="pulse", stop_event: async
                         save_transcript(current_turn_text, speaker="ARIA")
                         await emit("transcript", speaker="ARIA", text=current_turn_text)
                     current_turn_text = ""
+                    _last_state = "listening"
                     await state_callback("listening")
 
                 elif t == "error":
