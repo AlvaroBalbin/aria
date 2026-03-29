@@ -13,7 +13,7 @@ from memory import build_memory_context
 from db import save_transcript, get_transcript
 from config import OPENAI_API_KEY, USER_NAME
 
-MODEL = "gpt-4o-mini-realtime-preview"
+MODEL = "gpt-4o-realtime-preview"
 RT_URL = f"wss://api.openai.com/v1/realtime?model={MODEL}"
 RT_HEADERS = {
     "Authorization": f"Bearer {OPENAI_API_KEY}",
