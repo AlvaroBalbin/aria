@@ -5,7 +5,8 @@ load_dotenv()
 
 # AI providers
 OPENAI_API_KEY       = os.getenv("OPENAI_API_KEY", "")
-ANTHROPIC_API_KEY    = os.getenv("ANTHROPIC_API_KEY", "")  # unused but kept in case
+GROQ_API_KEY         = os.getenv("GROQ_API_KEY", "")
+BRAIN_PROVIDER       = os.getenv("BRAIN_PROVIDER", "openai")  # "openai" or "groq"
 
 # ElevenLabs
 ELEVENLABS_API_KEY   = os.getenv("ELEVENLABS_API_KEY", "")
@@ -15,8 +16,10 @@ ELEVENLABS_VOICE_ID  = os.getenv("ELEVENLABS_VOICE_ID", "")  # for TTS fallback
 # Search
 BRAVE_API_KEY        = os.getenv("BRAVE_API_KEY", "")
 
-# Twitter / X  (only Bearer Token needed for reading tweets)
-TWITTER_BEARER_TOKEN        = os.getenv("TWITTER_BEARER_TOKEN", "")
+# Twitter / X
+TWITTER_BEARER_TOKEN   = os.getenv("TWITTER_BEARER_TOKEN", "")
+TWITTER_CLIENT_ID      = os.getenv("TWITTER_CLIENT_ID", "")
+TWITTER_CLIENT_SECRET  = os.getenv("TWITTER_CLIENT_SECRET", "")
 
 # ARIA identity
 USER_NAME  = os.getenv("USER_NAME", "Alvaro")

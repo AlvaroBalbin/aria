@@ -14,9 +14,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
-from db import init_db, save_transcript, get_transcript, get_all_memories, save_conversation_turn, get_due_reminders, delete_reminder
+from db import init_db, save_transcript, get_transcript, get_all_memories, save_conversation_turn, get_due_reminders, delete_reminder, get_supabase_status
 from transcriber import transcribe_bytes, transcribe_webm
-from brain import ask
+from brain import ask, get_current_tone, set_current_tone, get_available_tones
 from memory import run_extraction_job
 from tts import speak, synthesize, clone_voice, get_active_voice_id
 
@@ -337,6 +337,27 @@ async def memories_endpoint():
     return get_all_memories()
 
 
+class ToneRequest(BaseModel):
+    tone: str
+
+
+@app.get("/tones")
+async def tones_endpoint():
+    return {"tones": get_available_tones(), "current": get_current_tone()}
+
+
+@app.post("/tone")
+async def set_tone_endpoint(req: ToneRequest):
+    if set_current_tone(req.tone):
+        return {"success": True, "current": req.tone}
+    return {"success": False, "error": "Invalid tone"}
+
+
+@app.get("/supabase-status")
+async def supabase_status_endpoint():
+    return get_supabase_status()
+
+
 # ── Background: check reminders ───────────────────────────────────────────────
 
 async def ambient_check_loop():
@@ -356,7 +377,7 @@ async def ambient_check_loop():
 async def memory_extraction_loop():
     """Extract memories from transcript every 5 minutes."""
     while True:
-        await asyncio.sleep(300)  # 5 minutes
+        await asyncio.sleep(600)  # 10 minutes
         try:
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, run_extraction_job)

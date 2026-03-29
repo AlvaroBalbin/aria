@@ -4,7 +4,10 @@ Claude/GPT tool implementations for ARIA.
 import datetime
 import httpx
 from db import save_memory, query_memories, get_transcript, save_reminder, get_all_memories
-from config import BRAVE_API_KEY, TWITTER_BEARER_TOKEN
+from config import BRAVE_API_KEY, TWITTER_BEARER_TOKEN, TWITTER_CLIENT_ID, TWITTER_CLIENT_SECRET
+
+# Reuse a single HTTP client for connection pooling
+_http = httpx.Client(timeout=10, follow_redirects=True)
 
 
 # ── Web search ────────────────────────────────────────────────────────────────
@@ -18,11 +21,10 @@ def search_web(args: dict) -> str:
 
 def _brave_search(query: str) -> str:
     try:
-        resp = httpx.get(
+        resp = _http.get(
             "https://api.search.brave.com/res/v1/web/search",
             headers={"Accept": "application/json", "X-Subscription-Token": BRAVE_API_KEY},
             params={"q": query, "count": 5},
-            timeout=10,
         )
         results = resp.json().get("web", {}).get("results", [])[:5]
         if not results:
@@ -34,10 +36,9 @@ def _brave_search(query: str) -> str:
 
 def _ddg_search(query: str) -> str:
     try:
-        resp = httpx.get(
+        resp = _http.get(
             "https://api.duckduckgo.com/",
             params={"q": query, "format": "json", "no_html": "1"},
-            timeout=10, follow_redirects=True,
         )
         data = resp.json()
         parts = [p for p in [data.get("Answer",""), data.get("AbstractText","")] if p]
@@ -97,24 +98,48 @@ def get_datetime_tool(args: dict) -> str:
 
 # ── Twitter / X ───────────────────────────────────────────────────────────────
 
+_twitter_bearer_cache = None
+
+def _get_twitter_bearer() -> str | None:
+    """Get a Bearer Token — use configured one, or exchange OAuth 2.0 client creds."""
+    global _twitter_bearer_cache
+    if TWITTER_BEARER_TOKEN:
+        return TWITTER_BEARER_TOKEN
+    if _twitter_bearer_cache:
+        return _twitter_bearer_cache
+    if TWITTER_CLIENT_ID and TWITTER_CLIENT_SECRET:
+        try:
+            import base64
+            creds = base64.b64encode(f"{TWITTER_CLIENT_ID}:{TWITTER_CLIENT_SECRET}".encode()).decode()
+            r = _http.post("https://api.x.com/oauth2/token",
+                headers={"Authorization": f"Basic {creds}", "Content-Type": "application/x-www-form-urlencoded"},
+                data="grant_type=client_credentials")
+            if r.status_code == 200:
+                _twitter_bearer_cache = r.json().get("access_token")
+                return _twitter_bearer_cache
+        except Exception:
+            pass
+    return None
+
+
 def search_x(args: dict) -> str:
     """Search X/Twitter for the latest tweets on a topic — real-time world news."""
     query = args["query"]
-    if not TWITTER_BEARER_TOKEN:
-        return "Twitter Bearer Token not configured."
+    bearer = _get_twitter_bearer()
+    if not bearer:
+        # Fallback: use web search to find Twitter/X content
+        return search_web({"query": f"site:x.com OR site:twitter.com {query}"})
     try:
-        import tweepy
-        client = tweepy.Client(bearer_token=TWITTER_BEARER_TOKEN)
-        # Exclude retweets for cleaner results
         full_query = f"{query} -is:retweet lang:en"
-        resp = client.search_recent_tweets(
-            query=full_query,
-            max_results=10,
-            tweet_fields=["text", "created_at", "author_id"],
-        )
-        if not resp.data:
+        r = _http.get("https://api.x.com/2/tweets/search/recent",
+            headers={"Authorization": f"Bearer {bearer}"},
+            params={"query": full_query, "max_results": 10, "tweet.fields": "text,created_at,author_id"})
+        if r.status_code != 200:
+            return search_web({"query": f"site:x.com {query}"})
+        data = r.json().get("data", [])
+        if not data:
             return f"No recent tweets found about '{query}'."
-        lines = [f"- {t.text[:180]}" for t in resp.data[:6]]
+        lines = [f"- {t['text'][:180]}" for t in data[:6]]
         return f"Latest on X about '{query}':\n" + "\n".join(lines)
     except Exception as e:
         return f"X search failed: {e}"

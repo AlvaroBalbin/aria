@@ -202,29 +202,40 @@ MEMORY INSTRUCTIONS:
 
 # ── Extraction job (called from background loop) ───────────────────────────
 
+_last_extraction_ts = 0.0  # track last processed transcript timestamp to avoid reprocessing
+
+
 def run_extraction_job():
-    """Process recent transcript: triage then extract if worthwhile."""
+    """Process recent transcript — extract memories directly (no triage call)."""
+    global _last_extraction_ts
     print("[Memory] Running extraction job...")
     try:
-        rows = get_transcript(minutes=30)
+        rows = get_transcript(minutes=15)
         if not rows:
             print("[Memory] No transcript to process.")
             return
 
-        # Combine recent transcript for triage
-        combined = " ".join(r["text"] for r in rows[-20:])  # last ~20 entries
-        if not triage_transcript(combined):
-            print("[Memory] Transcript triaged as not worth processing.")
+        # Only process rows newer than what we last processed
+        new_rows = [r for r in rows if r["ts"] > _last_extraction_ts]
+        if not new_rows:
+            print("[Memory] No new transcript since last extraction.")
             return
 
-        print("[Memory] Transcript worth processing — extracting memories...")
-        facts = extract_structured_memories(rows)
+        combined = " ".join(r["text"] for r in new_rows)
+        if len(combined.strip()) < 50:
+            print("[Memory] New transcript too short — skipping.")
+            return
+
+        facts = extract_structured_memories(new_rows)
         saved = 0
         for fact in facts:
             if fact.get("key") and fact.get("value"):
                 save_memory(fact["key"], fact["value"])
                 saved += 1
                 print(f"[Memory] Saved: {fact['key']}")
+
+        # Update watermark to the latest row we processed
+        _last_extraction_ts = max(r["ts"] for r in new_rows)
         print(f"[Memory] Extraction complete — {saved} memories saved.")
     except Exception as e:
         print(f"[Memory] Extraction job error: {e}")

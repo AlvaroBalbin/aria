@@ -17,7 +17,18 @@ def get_active_voice_id() -> str:
     return _active_voice_id
 
 
-TTS_CHAR_LIMIT = 200
+TTS_CHAR_LIMIT = 500
+
+# Cache ElevenLabs client — creating one per call adds ~200ms overhead
+_el_client = None
+
+
+def _get_el_client():
+    global _el_client
+    if _el_client is None:
+        from elevenlabs.client import ElevenLabs
+        _el_client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
+    return _el_client
 
 
 def synthesize(text: str) -> bytes | None:
@@ -36,8 +47,7 @@ def synthesize(text: str) -> bytes | None:
                 break
         text = truncated
     try:
-        from elevenlabs.client import ElevenLabs
-        client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
+        client = _get_el_client()
         audio_stream = client.text_to_speech.convert(
             text=text,
             voice_id=_active_voice_id,

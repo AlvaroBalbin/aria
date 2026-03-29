@@ -774,10 +774,65 @@ function proactiveGreeting() {
   }, 800);
 }
 
+// ── Supabase status check ────────────────────────────────────────────────────
+
+async function checkSupabaseStatus() {
+  try {
+    const resp = await fetch('/supabase-status');
+    const data = await resp.json();
+    const banner = document.getElementById('supabase-warning');
+    if (!data.connected) {
+      document.getElementById('supabase-warning-text').textContent =
+        'Cloud sync unavailable — running local only' + (data.error ? ` (${data.error.substring(0, 60)})` : '');
+      banner.classList.add('visible');
+    } else {
+      banner.classList.remove('visible');
+    }
+  } catch (_) {}
+}
+
+// ── Tone selector ───────────────────────────────────────────────────────────
+
+async function loadTones() {
+  try {
+    const resp = await fetch('/tones');
+    const data = await resp.json();
+    const select = document.getElementById('tone-select');
+    select.innerHTML = '';
+    data.tones.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = t.label;
+      if (t.id === data.current) opt.selected = true;
+      select.appendChild(opt);
+    });
+  } catch (e) {
+    console.error('Failed to load tones:', e);
+  }
+}
+
+document.getElementById('tone-select').addEventListener('change', async (e) => {
+  try {
+    const resp = await fetch('/tone', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tone: e.target.value }),
+    });
+    const data = await resp.json();
+    if (!data.success) {
+      console.error('Failed to set tone:', data.error);
+    }
+  } catch (err) {
+    console.error('Tone update failed:', err);
+  }
+});
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 applyTimeTheme();
 connect();
 drawWave();
 checkVoiceStatus();
+checkSupabaseStatus();
+loadTones();
 proactiveGreeting();

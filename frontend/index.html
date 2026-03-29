@@ -140,6 +140,32 @@
     }
     #voice-settings-btn:hover { border-color: #8b5cf6; color: #a78bfa; }
 
+    #tone-select {
+      background: #111120;
+      border: 1px solid #2e2e4e;
+      border-radius: 8px;
+      padding: 6px 10px;
+      color: #a78bfa;
+      font-size: 11px;
+      font-family: inherit;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      outline: none;
+      transition: all 0.2s;
+      -webkit-appearance: none;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236b7280'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 8px center;
+      padding-right: 24px;
+    }
+    #tone-select:hover { border-color: #8b5cf6; }
+    #tone-select:focus { border-color: #8b5cf6; box-shadow: 0 0 0 2px #8b5cf620; }
+    #tone-select option {
+      background: #111120;
+      color: #e8e8f0;
+    }
+
     #ambient-btn {
       background: none;
       border: 1px solid #2e2e4e;
@@ -494,6 +520,23 @@
       0%, 100% { opacity: 0.4; }
       50%       { opacity: 1;   }
     }
+
+    /* ── Supabase warning banner ── */
+    #supabase-warning {
+      display: none;
+      background: #1a1408;
+      border-bottom: 1px solid #92400e60;
+      padding: 6px 32px;
+      font-size: 11px;
+      color: #fbbf24;
+      letter-spacing: 0.5px;
+      align-items: center;
+      gap: 8px;
+    }
+    #supabase-warning.visible { display: flex; }
+    #supabase-warning .warn-dot {
+      width: 6px; height: 6px; border-radius: 50%; background: #f59e0b; flex-shrink: 0;
+    }
   </style>
 </head>
 <body>
@@ -509,10 +552,15 @@
     <label style="font-size:11px;color:#4b5563;display:flex;align-items:center;gap:6px;cursor:pointer;">
       <input type="checkbox" id="tts-toggle"> TTS
     </label>
+    <select id="tone-select" title="ARIA's tone">
+      <option value="default">Balanced</option>
+    </select>
     <button id="ambient-btn" onclick="toggleAmbient()"><span id="ambient-dot"></span>AMBIENT</button>
     <button id="voice-settings-btn" onclick="toggleVoicePanel()">VOICE</button>
   </div>
 </header>
+
+<div id="supabase-warning"><span class="warn-dot"></span><span id="supabase-warning-text">Cloud sync unavailable — running local only</span></div>
 
 <!-- Voice clone panel (collapsed by default) -->
 <div class="voice-panel" id="voice-panel">

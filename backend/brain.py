@@ -1,16 +1,77 @@
 """
-ARIA brain — OpenAI GPT-4o-mini with agentic tool use and personality.
+ARIA brain — agentic tool use and personality.
+Supports OpenAI (GPT-4o-mini) or Groq (Llama 3.3 70B) as provider.
 """
 import json
 import re
+import time
 import datetime
 import openai
-from config import OPENAI_API_KEY, USER_NAME
+from config import OPENAI_API_KEY, GROQ_API_KEY, BRAIN_PROVIDER, USER_NAME
 from tools import OPENAI_TOOL_SCHEMAS, TOOL_MAP
 from memory import build_memory_context
 from db import get_conversation_history, save_conversation_turn
 
-client = openai.OpenAI(api_key=OPENAI_API_KEY)
+# ── Tone system ────────────────────────────────────────────────────────────────
+
+TONES = {
+    "default": {
+        "label": "Balanced",
+        "prompt": "Be yourself — warm, curious, and natural. Match the energy of the conversation.",
+    },
+    "casual": {
+        "label": "Casual & Playful",
+        "prompt": "Be extra laid-back, use slang, jokes, and banter. Keep it light and fun. You're their best friend, not their assistant. Tease them gently. Use 'lol', 'nah', 'honestly', 'lowkey'.",
+    },
+    "professional": {
+        "label": "Professional",
+        "prompt": "Be polished and articulate. No slang, no filler words. Speak like a trusted advisor — clear, structured, and precise. Still warm, but keep it business-appropriate.",
+    },
+    "empathetic": {
+        "label": "Warm & Caring",
+        "prompt": "Be extra gentle and emotionally attuned. Validate feelings before solving problems. Use soft language — 'I hear you', 'that makes sense', 'take your time'. Prioritise emotional support over information.",
+    },
+    "witty": {
+        "label": "Sarcastic & Witty",
+        "prompt": "Be sharp, dry, and clever. Use irony and wit freely. Think British comedy — deadpan observations, gentle roasts, clever callbacks. Still helpful, just wrapped in humour.",
+    },
+    "calm": {
+        "label": "Calm & Zen",
+        "prompt": "Be serene and grounding. Short, thoughtful sentences. Use pauses (...) generously. Speak like a wise friend who never rushes. Minimalist but meaningful.",
+    },
+    "hype": {
+        "label": "Energetic & Hype",
+        "prompt": "Be enthusiastic and encouraging! Celebrate wins, big or small. Use exclamation marks, positive energy, and motivational language. You're their biggest cheerleader.",
+    },
+}
+
+_current_tone = "default"
+
+
+def get_current_tone() -> str:
+    return _current_tone
+
+
+def set_current_tone(tone: str) -> bool:
+    global _current_tone
+    if tone in TONES:
+        _current_tone = tone
+        return True
+    return False
+
+
+def get_available_tones() -> list[dict]:
+    return [{"id": k, "label": v["label"]} for k, v in TONES.items()]
+
+
+if BRAIN_PROVIDER == "groq" and GROQ_API_KEY:
+    client = openai.OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
+    BRAIN_MODEL = "llama-3.3-70b-versatile"
+    print(f"[Brain] Using Groq ({BRAIN_MODEL})")
+else:
+    client = openai.OpenAI(api_key=OPENAI_API_KEY)
+    BRAIN_MODEL = "gpt-4o-mini"
+    print(f"[Brain] Using OpenAI ({BRAIN_MODEL})")
 
 # Valid moods ARIA can express
 VALID_MOODS = {
@@ -66,15 +127,29 @@ MOOD TAG:
 {memory_context}"""
 
 
+_memory_cache = {"text": "", "ts": 0}
+
+
+def invalidate_memory_cache():
+    """Call after save_memory to ensure next prompt sees the update."""
+    _memory_cache["ts"] = 0
+
+
 def build_system_prompt() -> str:
-    memory_ctx = build_memory_context()
+    # Cache memory context for 60s — but invalidated on save_memory
+    now_ts = time.time()
+    if now_ts - _memory_cache["ts"] > 60 or not _memory_cache["text"]:
+        _memory_cache["text"] = build_memory_context()
+        _memory_cache["ts"] = now_ts
+
     now = datetime.datetime.now()
     time_str = now.strftime("%A, %B %d %Y at %H:%M")
+    tone_instruction = TONES.get(_current_tone, TONES["default"])["prompt"]
     return SYSTEM_PROMPT_BASE.format(
         user_name=USER_NAME,
-        memory_context=memory_ctx,
+        memory_context=_memory_cache["text"],
         current_time=time_str,
-    )
+    ) + f"\n\nTONE: {tone_instruction}"
 
 
 def parse_mood(text: str) -> tuple[str, str]:
@@ -101,7 +176,7 @@ def _ask_internal(user_text: str) -> dict:
     save_conversation_turn("user", user_text)
 
     # Build messages: system + history + current
-    history = get_conversation_history(limit=24)
+    history = get_conversation_history(limit=12)
     messages = [{"role": "system", "content": build_system_prompt()}]
     for m in history[:-1]:
         messages.append({"role": m["role"], "content": m["text"]})
@@ -110,11 +185,12 @@ def _ask_internal(user_text: str) -> dict:
     # Agentic loop — max 6 rounds of tool use
     for _ in range(6):
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=BRAIN_MODEL,
             messages=messages,
             tools=OPENAI_TOOL_SCHEMAS,
             tool_choice="auto",
             max_tokens=1024,
+            temperature=0.7,
         )
 
         choice = response.choices[0]
@@ -137,6 +213,8 @@ def _ask_internal(user_text: str) -> dict:
                 result = TOOL_MAP[fn_name](fn_args)
             except Exception as e:
                 result = f"Tool error: {e}"
+            if fn_name == "save_memory":
+                invalidate_memory_cache()
             print(f"[Result] {str(result)[:120]}".encode("ascii", "replace").decode())
             messages.append({
                 "role": "tool",
