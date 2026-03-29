@@ -244,7 +244,8 @@ async def realtime_session(state_callback, mic_device="pulse", stop_event: async
 
                 elif t == "input_audio_buffer.speech_stopped":
                     print("Realtime: user stopped")
-                    await state_callback("processing")
+                    # Don't send processing yet — wait for response to start
+                    # This prevents flickering when VAD triggers on noise
 
                 elif t == "conversation.item.input_audio_transcription.completed":
                     transcript = event.get("transcript", "")
@@ -253,6 +254,12 @@ async def realtime_session(state_callback, mic_device="pulse", stop_event: async
                         all_user.append(transcript)
                         save_transcript(transcript, speaker="User")
                         await emit("transcript", speaker="User", text=transcript)
+
+                elif t == "response.created":
+                    # Response is being generated — now show processing
+                    if _last_state != "processing":
+                        await state_callback("processing")
+                        _last_state = "processing"
 
                 elif t in ("response.audio.delta", "response.output_audio.delta"):
                     if _last_state != "speaking":

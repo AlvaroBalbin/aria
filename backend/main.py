@@ -80,11 +80,15 @@ async def send_pendant_state(state: str):
 
 async def send_pendant_text(text: str):
     """Send text to pendant for OLED display."""
+    print(f"Sending text to pendant: {text[:60]}...")
     if active_pendant_ws:
         try:
             await active_pendant_ws.send_text(json.dumps({"text": text[:120]}))
-        except Exception:
-            pass
+            print("Text sent OK")
+        except Exception as e:
+            print(f"Text send failed: {e}")
+    else:
+        print("No pendant connected — can't send text")
 
 
 async def on_realtime_event(event: dict):
