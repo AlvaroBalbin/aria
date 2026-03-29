@@ -19,6 +19,7 @@ from transcriber import transcribe_bytes, record_and_transcribe, record_ambient_
 from brain import ask
 from tts import speak
 from memory import memory_extraction_loop
+from realtime import realtime_session
 
 # Connected dashboard browsers (for live push)
 dashboard_clients: set[WebSocket] = set()
@@ -140,9 +141,9 @@ async def audio_ws(websocket: WebSocket):
 async def pendant_ws(websocket: WebSocket):
     """
     Pendant connects here. On button_press:
-      1. Pi records from AirPods/system mic
-      2. Transcribes → GPT → TTS
-      3. Sends state updates back to pendant LEDs + OLED
+      - Opens OpenAI Realtime session
+      - Streams mic → OpenAI → audio response → AirPods
+      - All in one shot, super low latency
     """
     await websocket.accept()
     print("Pendant connected on /ws/pendant")
@@ -160,37 +161,30 @@ async def pendant_ws(websocket: WebSocket):
             msg = json.loads(data)
 
             if msg.get("event") == "button_press":
-                print("Button pressed — starting recording")
-                await send_state("listening")
+                print("Button pressed — starting Realtime session")
 
-                loop = asyncio.get_event_loop()
-
-                # Pause ambient listening while recording user speech
+                # Pause ambient listening
                 global ambient_enabled
                 ambient_enabled = False
 
-                text = await loop.run_in_executor(None, record_and_transcribe)
+                try:
+                    result = await realtime_session(
+                        state_callback=send_state,
+                        mic_device="pulse",
+                    )
+                    if result["user"]:
+                        await broadcast("transcript", {
+                            "speaker": "User", "text": result["user"], "ts": time.time()
+                        })
+                    if result["assistant"]:
+                        await broadcast("transcript", {
+                            "speaker": "ARIA", "text": result["assistant"], "ts": time.time()
+                        })
+                except Exception as e:
+                    print(f"Realtime session failed: {e}")
+                    await send_state("idle")
 
                 ambient_enabled = True
-
-                if not text.strip():
-                    print("Nothing heard.")
-                    await send_state("idle")
-                    continue
-
-                print(f"Heard: {text}")
-                save_transcript(text, speaker="User")
-                await broadcast("transcript", {"speaker": "User", "text": text, "ts": time.time()})
-                await send_state("processing")
-
-                response = await loop.run_in_executor(None, ask, text)
-                print(f"ARIA: {response}")
-                save_transcript(response, speaker="ARIA")
-                await broadcast("transcript", {"speaker": "ARIA", "text": response, "ts": time.time()})
-                await send_state("speaking")
-
-                await loop.run_in_executor(None, speak, response)
-                await send_state("idle")
 
     except WebSocketDisconnect:
         print("Pendant disconnected")
