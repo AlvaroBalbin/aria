@@ -161,7 +161,7 @@ async def realtime_session(state_callback, mic_device="pulse"):
     )
 
     try:
-        async with websockets.connect(RT_URL, additional_headers=RT_HEADERS) as ws:
+        async with websockets.connect(RT_URL, extra_headers=RT_HEADERS) as ws:
             # Wait for session.created
             event = json.loads(await ws.recv())
             print(f"Realtime: {event['type']}")
