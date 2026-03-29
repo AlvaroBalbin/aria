@@ -230,6 +230,122 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
   micBtn.style.opacity = '0.4';
 }
 
+// ── Browser Audio (talk to ARIA via laptop mic/speaker) ──────────────────────
+
+const BROWSER_AUDIO_WS = `ws://${location.hostname}:8000/ws/browser-audio`;
+let baWs = null;
+let baContext = null;
+let baStream = null;
+let baProcessor = null;
+let baPlayCtx = null;
+let baNextPlayTime = 0;
+let baTalking = false;
+
+const talkBtn = document.getElementById('talk-btn');
+
+talkBtn.addEventListener('click', () => {
+  if (baTalking) {
+    stopTalking();
+  } else {
+    startTalking();
+  }
+});
+
+async function startTalking() {
+  baTalking = true;
+  talkBtn.classList.add('active');
+  talkBtn.textContent = 'STOP';
+
+  baPlayCtx = new AudioContext({ sampleRate: 24000 });
+  baNextPlayTime = 0;
+
+  baWs = new WebSocket(BROWSER_AUDIO_WS);
+  baWs.binaryType = 'arraybuffer';
+
+  baWs.onopen = async () => {
+    console.log('Browser audio WS connected');
+    try {
+      baStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e) {
+      console.error('Mic access denied:', e);
+      stopTalking();
+      return;
+    }
+
+    baContext = new AudioContext();
+    const source = baContext.createMediaStreamSource(baStream);
+    baProcessor = baContext.createScriptProcessor(4096, 1, 1);
+    const srcRate = baContext.sampleRate;
+    const tgtRate = 24000;
+
+    baProcessor.onaudioprocess = (e) => {
+      if (!baWs || baWs.readyState !== WebSocket.OPEN) return;
+      const input = e.inputBuffer.getChannelData(0);
+      const ratio = tgtRate / srcRate;
+      const outLen = Math.floor(input.length * ratio);
+      const pcm = new Int16Array(outLen);
+      for (let i = 0; i < outLen; i++) {
+        const srcIdx = i / ratio;
+        const idx = Math.floor(srcIdx);
+        const frac = srcIdx - idx;
+        const s = idx + 1 < input.length
+          ? input[idx] * (1 - frac) + input[idx + 1] * frac
+          : input[idx];
+        pcm[i] = Math.max(-32768, Math.min(32767, Math.floor(s * 32767)));
+      }
+      baWs.send(pcm.buffer);
+    };
+
+    source.connect(baProcessor);
+    baProcessor.connect(baContext.destination);
+    baWs.send(JSON.stringify({ event: 'start' }));
+  };
+
+  baWs.onmessage = (evt) => {
+    if (evt.data instanceof ArrayBuffer) {
+      playAudioChunk(evt.data);
+    }
+  };
+
+  baWs.onclose = () => {
+    if (baTalking) stopTalking();
+  };
+}
+
+function stopTalking() {
+  baTalking = false;
+  talkBtn.classList.remove('active');
+  talkBtn.textContent = 'TALK TO ARIA';
+
+  if (baWs && baWs.readyState === WebSocket.OPEN) {
+    baWs.send(JSON.stringify({ event: 'stop' }));
+    setTimeout(() => baWs.close(), 500);
+  }
+
+  if (baProcessor) { baProcessor.disconnect(); baProcessor = null; }
+  if (baContext) { baContext.close(); baContext = null; }
+  if (baStream) { baStream.getTracks().forEach(t => t.stop()); baStream = null; }
+  if (baPlayCtx) { baPlayCtx.close(); baPlayCtx = null; }
+}
+
+function playAudioChunk(buffer) {
+  if (!baPlayCtx || baPlayCtx.state === 'closed') return;
+  const int16 = new Int16Array(buffer);
+  const float32 = new Float32Array(int16.length);
+  for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768;
+
+  const audioBuf = baPlayCtx.createBuffer(1, float32.length, 24000);
+  audioBuf.getChannelData(0).set(float32);
+
+  const src = baPlayCtx.createBufferSource();
+  src.buffer = audioBuf;
+  src.connect(baPlayCtx.destination);
+
+  const startTime = Math.max(baPlayCtx.currentTime, baNextPlayTime);
+  src.start(startTime);
+  baNextPlayTime = startTime + audioBuf.duration;
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 connect();

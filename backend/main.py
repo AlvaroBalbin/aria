@@ -33,6 +33,11 @@ pending_pendant_state: str | None = None   # state to send when pendant reconnec
 pending_pendant_text: str | None = None    # text to send when pendant reconnects
 ambient_wake_event = asyncio.Event()       # signals ambient loop to wake up immediately
 
+# Browser audio state
+browser_audio_ws: WebSocket | None = None
+browser_audio_in: asyncio.Queue | None = None
+browser_audio_out: asyncio.Queue | None = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -116,7 +121,7 @@ async def on_realtime_event(event: dict):
         })
 
 
-async def start_session():
+async def start_session(use_browser_audio=False):
     """Start a realtime session."""
     global session_task, session_stop_event, ambient_enabled
     if session_task and not session_task.done():
@@ -124,6 +129,11 @@ async def start_session():
 
     ambient_enabled = False
     session_stop_event = asyncio.Event()
+
+    kwargs = {}
+    if use_browser_audio and browser_audio_in is not None and browser_audio_out is not None:
+        kwargs["audio_in_queue"] = browser_audio_in
+        kwargs["audio_out_queue"] = browser_audio_out
 
     async def run():
         global ambient_enabled
@@ -133,6 +143,7 @@ async def start_session():
                 mic_device="pulse",
                 stop_event=session_stop_event,
                 on_event=on_realtime_event,
+                **kwargs,
             )
         except Exception as e:
             print(f"Realtime failed: {e} — falling back to Claude pipeline")
@@ -337,6 +348,51 @@ async def pendant_ws(websocket: WebSocket):
         active_pendant_ws = None
     finally:
         ka_task.cancel()
+
+
+# ── Browser Audio WebSocket ──────────────────────────────────────────────────
+
+@app.websocket("/ws/browser-audio")
+async def browser_audio_endpoint(websocket: WebSocket):
+    """Browser streams mic audio here and receives playback audio back."""
+    global browser_audio_ws, browser_audio_in, browser_audio_out
+    await websocket.accept()
+    browser_audio_ws = websocket
+    browser_audio_in = asyncio.Queue()
+    browser_audio_out = asyncio.Queue()
+    print("Browser audio connected")
+
+    async def send_audio_to_browser():
+        """Read from output queue and send to browser."""
+        while True:
+            try:
+                chunk = await browser_audio_out.get()
+                await websocket.send_bytes(chunk)
+            except Exception:
+                break
+
+    send_task = asyncio.create_task(send_audio_to_browser())
+
+    try:
+        while True:
+            data = await websocket.receive()
+            if "bytes" in data:
+                await browser_audio_in.put(data["bytes"])
+            elif "text" in data:
+                msg = json.loads(data["text"])
+                if msg.get("event") == "start":
+                    print("Browser audio: starting session")
+                    await start_session(use_browser_audio=True)
+                elif msg.get("event") == "stop":
+                    print("Browser audio: stopping session")
+                    await stop_session()
+    except WebSocketDisconnect:
+        print("Browser audio disconnected")
+    finally:
+        browser_audio_ws = None
+        browser_audio_in = None
+        browser_audio_out = None
+        send_task.cancel()
 
 
 # ── Dashboard WebSocket ───────────────────────────────────────────────────────

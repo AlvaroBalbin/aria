@@ -205,6 +205,27 @@
       50% { transform: scale(1.1); }
     }
 
+    #talk-btn {
+      background: #8b5cf6;
+      border: 2px solid #a78bfa;
+      border-radius: 12px;
+      padding: 10px 24px;
+      color: white;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    #talk-btn:hover { background: #7c3aed; }
+    #talk-btn.active {
+      background: #ef4444;
+      border-color: #f87171;
+      box-shadow: 0 0 20px #ef444480;
+      animation: micPulse 1s ease-in-out infinite;
+    }
+
     /* ── Glow overlay when speaking ── */
     body.speaking::after {
       content: '';
@@ -224,6 +245,7 @@
 
 <header>
   <div class="logo">ARIA</div>
+  <button id="talk-btn">TALK TO ARIA</button>
   <div id="status-badge">IDLE</div>
   <div id="memory-count">0 memories</div>
 </header>

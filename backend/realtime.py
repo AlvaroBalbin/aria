@@ -184,17 +184,20 @@ You run on a Raspberry Pi 5, connected to an ESP32 pendant with a screen and LED
 - NEVER use em dashes. Use regular hyphens (-) instead."""
 
 
-async def realtime_session(state_callback, mic_device="pulse", stop_event: asyncio.Event = None, on_event=None):
+async def realtime_session(state_callback, mic_device="pulse", stop_event: asyncio.Event = None, on_event=None,
+                           audio_in_queue: asyncio.Queue = None, audio_out_queue: asyncio.Queue = None):
     """
     Persistent realtime conversation session.
     Keeps the connection open for multiple back-and-forth turns.
     Set stop_event to signal shutdown from outside.
     on_event: async callback for broadcasting events to dashboard/pendant.
+    audio_in_queue/audio_out_queue: if provided, use browser audio instead of local mic/speaker.
     """
     all_user = []
     all_assistant = []
     current_turn_text = ""
     _last_state = ""
+    use_browser_audio = audio_in_queue is not None and audio_out_queue is not None
 
     async def emit(event_type, **data):
         if on_event:
@@ -203,17 +206,20 @@ async def realtime_session(state_callback, mic_device="pulse", stop_event: async
             except Exception:
                 pass
 
-    # Start aplay process to stream output audio
-    player = subprocess.Popen(
-        ["aplay", "-D", "pulse", "-t", "raw", "-f", "S16_LE", "-r", "24000", "-c", "1", "-q"],
-        stdin=subprocess.PIPE,
-    )
+    player = None
+    recorder = None
+    if not use_browser_audio:
+        # Start aplay process to stream output audio
+        player = subprocess.Popen(
+            ["aplay", "-D", "pulse", "-t", "raw", "-f", "S16_LE", "-r", "24000", "-c", "1", "-q"],
+            stdin=subprocess.PIPE,
+        )
 
-    # Start arecord process to capture mic
-    recorder = subprocess.Popen(
-        ["arecord", "-D", mic_device, "-f", "S16_LE", "-r", "24000", "-c", "1", "-q"],
-        stdout=subprocess.PIPE,
-    )
+        # Start arecord process to capture mic
+        recorder = subprocess.Popen(
+            ["arecord", "-D", mic_device, "-f", "S16_LE", "-r", "24000", "-c", "1", "-q"],
+            stdout=subprocess.PIPE,
+        )
 
     try:
         async with websockets.connect(RT_URL, extra_headers=RT_HEADERS) as ws:
@@ -250,18 +256,31 @@ async def realtime_session(state_callback, mic_device="pulse", stop_event: async
 
             # Stream mic audio in background
             async def stream_mic():
-                loop = asyncio.get_event_loop()
-                while True:
-                    try:
-                        chunk = await loop.run_in_executor(None, recorder.stdout.read, 4800)
-                        if not chunk:
+                if use_browser_audio:
+                    while True:
+                        try:
+                            chunk = await audio_in_queue.get()
+                            if not chunk:
+                                break
+                            await ws.send(json.dumps({
+                                "type": "input_audio_buffer.append",
+                                "audio": base64.b64encode(chunk).decode(),
+                            }))
+                        except Exception:
                             break
-                        await ws.send(json.dumps({
-                            "type": "input_audio_buffer.append",
-                            "audio": base64.b64encode(chunk).decode(),
-                        }))
-                    except Exception:
-                        break
+                else:
+                    loop = asyncio.get_event_loop()
+                    while True:
+                        try:
+                            chunk = await loop.run_in_executor(None, recorder.stdout.read, 4800)
+                            if not chunk:
+                                break
+                            await ws.send(json.dumps({
+                                "type": "input_audio_buffer.append",
+                                "audio": base64.b64encode(chunk).decode(),
+                            }))
+                        except Exception:
+                            break
 
             mic_task = asyncio.create_task(stream_mic())
 
@@ -309,11 +328,17 @@ async def realtime_session(state_callback, mic_device="pulse", stop_event: async
                         await state_callback("speaking")
                         _last_state = "speaking"
                     chunk = base64.b64decode(event["delta"])
-                    try:
-                        player.stdin.write(chunk)
-                        player.stdin.flush()
-                    except Exception:
-                        pass
+                    if use_browser_audio:
+                        try:
+                            await audio_out_queue.put(chunk)
+                        except Exception:
+                            pass
+                    else:
+                        try:
+                            player.stdin.write(chunk)
+                            player.stdin.flush()
+                        except Exception:
+                            pass
 
                 elif t in ("response.audio_transcript.delta", "response.output_audio_transcript.delta"):
                     current_turn_text += event.get("delta", "")
@@ -362,22 +387,24 @@ async def realtime_session(state_callback, mic_device="pulse", stop_event: async
     except Exception as e:
         print(f"Realtime session error: {e}")
     finally:
-        try:
-            recorder.terminate()
-            recorder.wait(timeout=2)
-        except Exception:
+        if recorder:
             try:
-                recorder.kill()
+                recorder.terminate()
+                recorder.wait(timeout=2)
             except Exception:
-                pass
-        try:
-            player.stdin.close()
-            player.wait(timeout=2)
-        except Exception:
+                try:
+                    recorder.kill()
+                except Exception:
+                    pass
+        if player:
             try:
-                player.kill()
+                player.stdin.close()
+                player.wait(timeout=2)
             except Exception:
-                pass
+                try:
+                    player.kill()
+                except Exception:
+                    pass
 
     await state_callback("idle")
     return {
