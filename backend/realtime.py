@@ -115,6 +115,12 @@ You hear everything through their AirPods and speak back through them.
 - Never say "as an AI". You're ARIA, act like it.
 - Match the user's energy.
 
+## Language
+- ALWAYS respond in English by default.
+- If the user explicitly asks you to speak in another language, switch to that language.
+- If the user speaks to you in another language, respond in that language.
+- But unless told otherwise, English is your default.
+
 ## Capabilities
 - Search the web and X/Twitter for real-time info
 - Remember things about {USER_NAME} permanently
@@ -183,9 +189,9 @@ async def realtime_session(state_callback, mic_device="pulse", stop_event: async
                     "output_audio_format": "pcm16",
                     "turn_detection": {
                         "type": "server_vad",
-                        "threshold": 0.6,
-                        "prefix_padding_ms": 400,
-                        "silence_duration_ms": 1200,
+                        "threshold": 0.75,
+                        "prefix_padding_ms": 500,
+                        "silence_duration_ms": 1500,
                     },
                     "input_audio_transcription": {"model": "whisper-1"},
                     "tools": RT_TOOLS,

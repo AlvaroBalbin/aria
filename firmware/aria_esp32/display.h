@@ -75,11 +75,17 @@ void showResponseText(const String& text) {
 
   lastDrawnState = -1;
   lastText = text;
+  showingText = true;
 }
 
+static bool showingText = false;  // true when response text is on screen
+
 void updateDisplay(int state) {
+  // Don't overwrite response text while speaking
+  if (showingText && (state == 3 || state == 2)) return;
   if (state == lastDrawnState) return;
   lastDrawnState = state;
+  showingText = false;
 
   switch (state) {
     case 0:  // IDLE
@@ -103,14 +109,12 @@ void updateDisplay(int state) {
       tft.setCursor(75, 105);
       tft.print("Thinking...");
       break;
-    case 3:  // SPEAKING — don't overwrite if we have response text
-      if (lastText.length() == 0) {
-        tft.fillScreen(ST77XX_BLACK);
-        tft.setTextColor(ST77XX_MAGENTA);
-        tft.setTextSize(3);
-        tft.setCursor(85, 105);
-        tft.print("Speaking...");
-      }
+    case 3:  // SPEAKING
+      tft.fillScreen(ST77XX_BLACK);
+      tft.setTextColor(ST77XX_MAGENTA);
+      tft.setTextSize(3);
+      tft.setCursor(85, 105);
+      tft.print("Speaking...");
       break;
   }
 }

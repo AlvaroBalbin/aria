@@ -7,56 +7,57 @@
 #define LED_PROCESSING D4   // yellow LED
 #define LED_SPEAKING   D5   // red/magenta LED
 
+// ESP32 LEDC PWM channels
+#define CH_IDLE       0
+#define CH_LISTENING  1
+#define CH_PROCESSING 2
+#define CH_SPEAKING   3
+
 void initLEDs() {
-  pinMode(LED_IDLE,       OUTPUT);
-  pinMode(LED_LISTENING,  OUTPUT);
-  pinMode(LED_PROCESSING, OUTPUT);
-  pinMode(LED_SPEAKING,   OUTPUT);
-  digitalWrite(LED_IDLE,       LOW);
-  digitalWrite(LED_LISTENING,  LOW);
-  digitalWrite(LED_PROCESSING, LOW);
-  digitalWrite(LED_SPEAKING,   LOW);
+  // Setup LEDC PWM on each pin (ESP32-native, 8-bit, 5kHz)
+  ledcAttach(LED_IDLE,       5000, 8);
+  ledcAttach(LED_LISTENING,  5000, 8);
+  ledcAttach(LED_PROCESSING, 5000, 8);
+  ledcAttach(LED_SPEAKING,   5000, 8);
+  ledcWrite(LED_IDLE, 0);
+  ledcWrite(LED_LISTENING, 0);
+  ledcWrite(LED_PROCESSING, 0);
+  ledcWrite(LED_SPEAKING, 0);
 }
 
 void updateLEDs(int state) {
-  // 0=IDLE, 1=LISTENING, 2=PROCESSING, 3=SPEAKING
-  static unsigned long lastBlink = 0;
-  static bool blinkOn = false;
-
   // All off first
-  digitalWrite(LED_IDLE,       LOW);
-  digitalWrite(LED_LISTENING,  LOW);
-  digitalWrite(LED_PROCESSING, LOW);
-  digitalWrite(LED_SPEAKING,   LOW);
+  ledcWrite(LED_IDLE, 0);
+  ledcWrite(LED_LISTENING, 0);
+  ledcWrite(LED_PROCESSING, 0);
+  ledcWrite(LED_SPEAKING, 0);
+
+  float t = millis() / 1000.0;
 
   switch (state) {
-    case 0: { // IDLE — slow breathing on blue LED using PWM
-      float breath = (sin(millis() / 1500.0 * PI) + 1.0) / 2.0;
-      analogWrite(LED_IDLE, (int)(breath * 255));
+    case 0: { // IDLE — slow breathing on blue
+      float breath = (sin(t * 2.0) + 1.0) / 2.0;
+      ledcWrite(LED_IDLE, (int)(breath * 200));
       break;
     }
 
     case 1: { // LISTENING — green pulsing
-      float pulse = (sin(millis() / 400.0 * PI) + 1.0) / 2.0;
-      analogWrite(LED_LISTENING, 128 + (int)(pulse * 127));
+      float pulse = (sin(t * 5.0) + 1.0) / 2.0;
+      ledcWrite(LED_LISTENING, 128 + (int)(pulse * 127));
       break;
     }
 
-    case 2: // PROCESSING — yellow rapid chase
-      if (millis() - lastBlink > 120) {
-        lastBlink = millis();
-        blinkOn = !blinkOn;
-      }
-      digitalWrite(LED_PROCESSING, blinkOn ? HIGH : LOW);
-      // Also flicker idle LED for effect
-      digitalWrite(LED_IDLE, !blinkOn ? HIGH : LOW);
+    case 2: { // PROCESSING — yellow rapid blink + idle flicker
+      float blink = (sin(t * 12.0) + 1.0) / 2.0;
+      ledcWrite(LED_PROCESSING, (int)(blink * 255));
+      ledcWrite(LED_IDLE, (int)((1.0 - blink) * 80));
       break;
+    }
 
-    case 3: { // SPEAKING — magenta breathing sync'd to speech
-      float speak = (sin(millis() / 300.0 * PI) + 1.0) / 2.0;
-      analogWrite(LED_SPEAKING, 100 + (int)(speak * 155));
-      // Subtle green accent
-      analogWrite(LED_LISTENING, (int)(speak * 40));
+    case 3: { // SPEAKING — magenta breathing + green accent
+      float speak = (sin(t * 6.0) + 1.0) / 2.0;
+      ledcWrite(LED_SPEAKING, 100 + (int)(speak * 155));
+      ledcWrite(LED_LISTENING, (int)(speak * 40));
       break;
     }
   }
