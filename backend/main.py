@@ -140,13 +140,14 @@ async def audio_ws(websocket: WebSocket):
 @app.websocket("/ws/pendant")
 async def pendant_ws(websocket: WebSocket):
     """
-    Pendant connects here. On button_press:
-      - Opens OpenAI Realtime session
-      - Streams mic → OpenAI → audio response → AirPods
-      - All in one shot, super low latency
+    Pendant connects here. First button press starts a persistent Realtime session.
+    Second button press stops it. Toggle on/off.
     """
     await websocket.accept()
     print("Pendant connected on /ws/pendant")
+
+    session_task = None
+    stop_event = None
 
     async def send_state(state: str):
         try:
@@ -161,36 +162,42 @@ async def pendant_ws(websocket: WebSocket):
             msg = json.loads(data)
 
             if msg.get("event") == "button_press":
-                print("Button pressed — starting Realtime session")
+                if session_task and not session_task.done():
+                    # Session running — stop it
+                    print("Button pressed — stopping Realtime session")
+                    stop_event.set()
+                    await session_task
+                    session_task = None
+                    global ambient_enabled
+                    ambient_enabled = True
+                else:
+                    # No session — start one
+                    print("Button pressed — starting Realtime session")
+                    ambient_enabled = False
+                    stop_event = asyncio.Event()
 
-                # Pause ambient listening
-                global ambient_enabled
-                ambient_enabled = False
+                    async def run_session():
+                        try:
+                            await realtime_session(
+                                state_callback=send_state,
+                                mic_device="pulse",
+                                stop_event=stop_event,
+                            )
+                        except Exception as e:
+                            print(f"Realtime session failed: {e}")
+                            await send_state("idle")
 
-                try:
-                    result = await realtime_session(
-                        state_callback=send_state,
-                        mic_device="pulse",
-                    )
-                    if result["user"]:
-                        await broadcast("transcript", {
-                            "speaker": "User", "text": result["user"], "ts": time.time()
-                        })
-                    if result["assistant"]:
-                        await broadcast("transcript", {
-                            "speaker": "ARIA", "text": result["assistant"], "ts": time.time()
-                        })
-                except Exception as e:
-                    print(f"Realtime session failed: {e}")
-                    await send_state("idle")
-
-                ambient_enabled = True
+                    session_task = asyncio.create_task(run_session())
 
     except WebSocketDisconnect:
         print("Pendant disconnected")
+        if stop_event:
+            stop_event.set()
         ambient_enabled = True
     except Exception as e:
         print(f"Pendant handler crashed: {e}")
+        if stop_event:
+            stop_event.set()
         ambient_enabled = True
 
 

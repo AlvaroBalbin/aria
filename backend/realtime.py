@@ -135,22 +135,18 @@ You run on a Raspberry Pi 5, connected to an ESP32 pendant with a screen and LED
 - Be proactive — if ambient context is relevant, reference it."""
 
 
-async def realtime_session(state_callback, mic_device="pulse"):
+async def realtime_session(state_callback, mic_device="pulse", stop_event: asyncio.Event = None):
     """
-    Run a single realtime conversation turn:
-    1. Connect to OpenAI Realtime WS
-    2. Stream mic audio
-    3. Receive + play audio response
-    4. Handle tool calls
-    5. Return transcript of the exchange
+    Persistent realtime conversation session.
+    Keeps the connection open for multiple back-and-forth turns.
+    Set stop_event to signal shutdown from outside.
     """
-    user_transcript = ""
-    assistant_transcript = ""
-    audio_out = bytearray()
+    all_user = []
+    all_assistant = []
 
-    # Start aplay process to stream output audio to AirPods
+    # Start aplay process to stream output audio
     player = subprocess.Popen(
-        ["aplay", "-D", "pulse", "-f", "S16_LE", "-r", "24000", "-c", "1", "-q"],
+        ["aplay", "-D", "pulse", "-t", "raw", "-f", "S16_LE", "-r", "24000", "-c", "1", "-q"],
         stdin=subprocess.PIPE,
     )
 
@@ -198,7 +194,6 @@ async def realtime_session(state_callback, mic_device="pulse"):
                 loop = asyncio.get_event_loop()
                 while True:
                     try:
-                        # Read 100ms chunks: 24000 * 2 bytes * 0.1s = 4800 bytes
                         chunk = await loop.run_in_executor(None, recorder.stdout.read, 4800)
                         if not chunk:
                             break
@@ -211,33 +206,36 @@ async def realtime_session(state_callback, mic_device="pulse"):
 
             mic_task = asyncio.create_task(stream_mic())
 
-            # Process events
-            response_done = False
-            while not response_done:
-                try:
-                    raw = await asyncio.wait_for(ws.recv(), timeout=30)
-                except asyncio.TimeoutError:
-                    print("Realtime: timeout waiting for response")
+            # Process events — loop forever until stop_event or disconnect
+            while True:
+                # Check if we should stop
+                if stop_event and stop_event.is_set():
+                    print("Realtime: stop requested")
                     break
+
+                try:
+                    raw = await asyncio.wait_for(ws.recv(), timeout=60)
+                except asyncio.TimeoutError:
+                    # No activity for 60s — still keep alive, just loop
+                    continue
 
                 event = json.loads(raw)
                 t = event["type"]
 
                 if t == "input_audio_buffer.speech_started":
                     print("Realtime: user speaking...")
+                    await state_callback("listening")
 
                 elif t == "input_audio_buffer.speech_stopped":
                     print("Realtime: user stopped")
                     await state_callback("processing")
-                    # Kill the recorder — we got the speech
-                    try:
-                        recorder.terminate()
-                    except Exception:
-                        pass
 
                 elif t == "conversation.item.input_audio_transcription.completed":
-                    user_transcript = event.get("transcript", "")
-                    print(f"Realtime heard: {user_transcript}")
+                    transcript = event.get("transcript", "")
+                    if transcript.strip():
+                        print(f"Realtime heard: {transcript}")
+                        all_user.append(transcript)
+                        save_transcript(transcript, speaker="User")
 
                 elif t in ("response.audio.delta", "response.output_audio.delta"):
                     await state_callback("speaking")
@@ -248,11 +246,11 @@ async def realtime_session(state_callback, mic_device="pulse"):
                     except Exception:
                         pass
 
-                elif t in ("response.audio.done", "response.output_audio.done"):
-                    pass  # audio done, wait for response.done
-
                 elif t in ("response.audio_transcript.delta", "response.output_audio_transcript.delta"):
-                    assistant_transcript += event.get("delta", "")
+                    # Accumulate current turn's assistant transcript
+                    if not hasattr(realtime_session, '_current_turn'):
+                        realtime_session._current_turn = ""
+                    realtime_session._current_turn += event.get("delta", "")
 
                 elif t == "response.output_item.done":
                     item = event.get("item", {})
@@ -268,7 +266,6 @@ async def realtime_session(state_callback, mic_device="pulse"):
                             result = f"Tool error: {e}"
                         print(f"[Result] {str(result)[:120]}")
 
-                        # Send result back
                         await ws.send(json.dumps({
                             "type": "conversation.item.create",
                             "item": {
@@ -281,18 +278,24 @@ async def realtime_session(state_callback, mic_device="pulse"):
 
                 elif t == "response.done":
                     print("Realtime: response complete")
-                    response_done = True
+                    # Save assistant transcript for this turn
+                    turn_text = getattr(realtime_session, '_current_turn', "")
+                    if turn_text.strip():
+                        all_assistant.append(turn_text)
+                        save_transcript(turn_text, speaker="ARIA")
+                    realtime_session._current_turn = ""
+                    # Go back to listening for next turn
+                    await state_callback("listening")
 
                 elif t == "error":
                     print(f"Realtime error: {event}")
-                    response_done = True
+                    break
 
             mic_task.cancel()
 
     except Exception as e:
         print(f"Realtime session error: {e}")
     finally:
-        # Clean up processes
         try:
             recorder.terminate()
             recorder.wait(timeout=2)
@@ -310,11 +313,8 @@ async def realtime_session(state_callback, mic_device="pulse"):
             except Exception:
                 pass
 
-    # Save transcripts
-    if user_transcript:
-        save_transcript(user_transcript, speaker="User")
-    if assistant_transcript:
-        save_transcript(assistant_transcript, speaker="ARIA")
-
     await state_callback("idle")
-    return {"user": user_transcript, "assistant": assistant_transcript}
+    return {
+        "user": " | ".join(all_user),
+        "assistant": " | ".join(all_assistant),
+    }
