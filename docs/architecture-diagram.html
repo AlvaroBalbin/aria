@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARIA - System Architecture</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0a0f;
+    color: #e0e0e0;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 40px;
+  }
+  .container {
+    width: 1400px;
+    max-width: 100%;
+  }
+  h1 {
+    text-align: center;
+    font-size: 36px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    letter-spacing: 6px;
+    color: #fff;
+  }
+  .subtitle {
+    text-align: center;
+    font-size: 14px;
+    color: #888;
+    margin-bottom: 48px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  .layers {
+    display: flex;
+    gap: 24px;
+    align-items: stretch;
+  }
+  .layer {
+    flex: 1;
+    border-radius: 16px;
+    padding: 28px;
+    position: relative;
+    min-height: 480px;
+    display: flex;
+    flex-direction: column;
+  }
+  .layer-wearable {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border: 1px solid #2a4a7f;
+  }
+  .layer-brain {
+    background: linear-gradient(135deg, #1a1a2e 0%, #1e3a2f 100%);
+    border: 1px solid #2a7f4a;
+    flex: 1.4;
+  }
+  .layer-dashboard {
+    background: linear-gradient(135deg, #1a1a2e 0%, #3a1e2f 100%);
+    border: 1px solid #7f2a4a;
+  }
+  .layer-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    color: #888;
+    margin-bottom: 4px;
+  }
+  .layer-title {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .layer-wearable .layer-title { color: #4a9eff; }
+  .layer-brain .layer-title { color: #4aff9e; }
+  .layer-dashboard .layer-title { color: #ff4a9e; }
+  .layer-chip {
+    display: inline-block;
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    margin-bottom: 20px;
+    font-weight: 600;
+  }
+  .layer-wearable .layer-chip { background: #4a9eff22; color: #4a9eff; border: 1px solid #4a9eff44; }
+  .layer-brain .layer-chip { background: #4aff9e22; color: #4aff9e; border: 1px solid #4aff9e44; }
+  .layer-dashboard .layer-chip { background: #ff4a9e22; color: #ff4a9e; border: 1px solid #ff4a9e44; }
+
+  .component {
+    background: #ffffff08;
+    border: 1px solid #ffffff15;
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .component:hover { background: #ffffff12; }
+  .component-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .layer-wearable .component-icon { background: #4a9eff20; }
+  .layer-brain .component-icon { background: #4aff9e20; }
+  .layer-dashboard .component-icon { background: #ff4a9e20; }
+  .component-text h4 {
+    font-size: 13px;
+    font-weight: 600;
+    color: #ddd;
+    margin-bottom: 2px;
+  }
+  .component-text p {
+    font-size: 11px;
+    color: #777;
+    line-height: 1.3;
+  }
+
+  .connector {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 80px;
+    flex-shrink: 0;
+  }
+  .connector-line {
+    width: 60px;
+    height: 2px;
+    position: relative;
+  }
+  .connector-line-blue { background: linear-gradient(90deg, #4a9eff, #4aff9e); }
+  .connector-line-pink { background: linear-gradient(90deg, #4aff9e, #ff4a9e); }
+  .connector-label {
+    font-size: 10px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    text-align: center;
+    line-height: 1.4;
+  }
+  .connector-arrow {
+    font-size: 10px;
+    color: #555;
+  }
+
+  .apis-bar {
+    margin-top: 40px;
+    background: linear-gradient(135deg, #1a1a2e 0%, #1e1e30 100%);
+    border: 1px solid #333;
+    border-radius: 12px;
+    padding: 20px 28px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+  .apis-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    color: #888;
+    margin-right: 8px;
+    white-space: nowrap;
+  }
+  .api-tag {
+    font-size: 11px;
+    padding: 5px 14px;
+    border-radius: 20px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .api-openai { background: #10a37f22; color: #10a37f; border: 1px solid #10a37f44; }
+  .api-eleven { background: #ff6b3522; color: #ff8c5a; border: 1px solid #ff6b3544; }
+  .api-brave { background: #fb542b22; color: #fb7a5b; border: 1px solid #fb542b44; }
+  .api-twitter { background: #1da1f222; color: #5bbcf7; border: 1px solid #1da1f244; }
+  .api-sqlite { background: #ffcc0022; color: #e6b800; border: 1px solid #ffcc0044; }
+
+  .stats-bar {
+    margin-top: 16px;
+    display: flex;
+    gap: 16px;
+  }
+  .stat {
+    flex: 1;
+    background: #ffffff06;
+    border: 1px solid #ffffff10;
+    border-radius: 10px;
+    padding: 16px 20px;
+    text-align: center;
+  }
+  .stat-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: #fff;
+  }
+  .stat-label {
+    font-size: 11px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-top: 4px;
+  }
+
+  .flow-bar {
+    margin-top: 16px;
+    background: linear-gradient(90deg, #4a9eff15, #4aff9e15, #ff4a9e15);
+    border: 1px solid #ffffff10;
+    border-radius: 12px;
+    padding: 18px 28px;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    justify-content: center;
+  }
+  .flow-step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #aaa;
+  }
+  .flow-step span {
+    font-weight: 600;
+    color: #ddd;
+  }
+  .flow-arrow {
+    margin: 0 12px;
+    color: #444;
+    font-size: 16px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>ARIA</h1>
+  <p class="subtitle">Distributed Edge AI Architecture</p>
+
+  <div style="display:flex; align-items:stretch;">
+    <!-- Layer 1: Wearable -->
+    <div class="layer layer-wearable">
+      <div class="layer-label">Layer 1</div>
+      <div class="layer-title">Companion Device</div>
+      <span class="layer-chip">ESP32</span>
+
+      <div class="component">
+        <div class="component-icon">&#9673;</div>
+        <div class="component-text">
+          <h4>Push Button (GPIO 0)</h4>
+          <p>Start/stop conversation</p>
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-icon">&#9638;</div>
+        <div class="component-text">
+          <h4>ST7789 TFT Display</h4>
+          <p>240x320 SPI, word-wrapped responses</p>
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-icon">&#10687;</div>
+        <div class="component-text">
+          <h4>4x RGB PWM LEDs</h4>
+          <p>Sine-wave breathing animations</p>
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-icon">&#8801;</div>
+        <div class="component-text">
+          <h4>WiFi State Machine</h4>
+          <p>Auto-connects to Pi hotspot</p>
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-icon">&#9707;</div>
+        <div class="component-text">
+          <h4>WebSocket Client</h4>
+          <p>Bidirectional state sync + keepalive</p>
+        </div>
+      </div>
+      <div class="component" style="margin-top:auto; background:#4a9eff10; border-color:#4a9eff30;">
+        <div class="component-icon" style="background:#4a9eff30;">&#9971;</div>
+        <div class="component-text">
+          <h4>3D-Printed Enclosure</h4>
+          <p>Custom Autodesk Inventor design</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Connector 1 -->
+    <div class="connector">
+      <div class="connector-label">WiFi<br>WebSocket</div>
+      <div class="connector-line connector-line-blue"></div>
+      <div class="connector-arrow">&larr; state &rarr;</div>
+      <div class="connector-line connector-line-blue"></div>
+      <div class="connector-arrow">&larr; text &rarr;</div>
+      <div class="connector-line connector-line-blue"></div>
+      <div class="connector-label">/ws/pendant<br>/ws/audio</div>
+    </div>
+
+    <!-- Layer 2: Brain -->
+    <div class="layer layer-brain">
+      <div class="layer-label">Layer 2</div>
+      <div class="layer-title">Edge AI Brain</div>
+      <span class="layer-chip">Raspberry Pi 5</span>
+
+      <div class="component">
+        <div class="component-icon">&#9881;</div>
+        <div class="component-text">
+          <h4>FastAPI Server</h4>
+          <p>3 WebSocket channels, REST API, session management</p>
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-icon">&#9733;</div>
+        <div class="component-text">
+          <h4>GPT-5.2 Agentic Brain</h4>
+          <p>10 tools, 6-iteration reasoning loop, 256 token responses</p>
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-icon">&#9835;</div>
+        <div class="component-text">
+          <h4>OpenAI Realtime API</h4>
+          <p>24kHz voice-to-voice, server VAD, persistent sessions</p>
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-icon">&#9998;</div>
+        <div class="component-text">
+          <h4>Whisper STT</h4>
+          <p>Ambient transcription + hallucination filtering</p>
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-icon">&#9836;</div>
+        <div class="component-text">
+          <h4>3-Tier TTS</h4>
+          <p>ElevenLabs voice clone > OpenAI TTS > espeak</p>
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-icon">&#9684;</div>
+        <div class="component-text">
+          <h4>Memory Engine</h4>
+          <p>Auto-extracts facts every 15 min, top 25 in context</p>
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-icon">&#9478;</div>
+        <div class="component-text">
+          <h4>SQLite (5 tables)</h4>
+          <p>Transcripts, memories, conversations, reminders, calendar</p>
+        </div>
+      </div>
+      <div class="component" style="margin-top:auto; background:#4aff9e10; border-color:#4aff9e30;">
+        <div class="component-icon" style="background:#4aff9e30;">&#9901;</div>
+        <div class="component-text">
+          <h4>Bluetooth Audio</h4>
+          <p>AirPods I/O via ALSA (arecord/aplay)</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Connector 2 -->
+    <div class="connector">
+      <div class="connector-label">WiFi<br>WebSocket</div>
+      <div class="connector-line connector-line-pink"></div>
+      <div class="connector-arrow">&larr; events &rarr;</div>
+      <div class="connector-line connector-line-pink"></div>
+      <div class="connector-arrow">&larr; chat &rarr;</div>
+      <div class="connector-line connector-line-pink"></div>
+      <div class="connector-label">/ws/dashboard</div>
+    </div>
+
+    <!-- Layer 3: Dashboard -->
+    <div class="layer layer-dashboard">
+      <div class="layer-label">Layer 3</div>
+      <div class="layer-title">Live Dashboard</div>
+      <span class="layer-chip">Browser</span>
+
+      <div class="component">
+        <div class="component-icon">&#10073;</div>
+        <div class="component-text">
+          <h4>Animated Waveform</h4>
+          <p>State-driven color, amplitude, speed</p>
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-icon">&#9776;</div>
+        <div class="component-text">
+          <h4>Live Transcript Feed</h4>
+          <p>User, ARIA, Ambient speakers</p>
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-icon">&#9993;</div>
+        <div class="component-text">
+          <h4>Conversation History</h4>
+          <p>Full chat log with timestamps</p>
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-icon">&#9889;</div>
+        <div class="component-text">
+          <h4>Tool Activity Log</h4>
+          <p>Real-time tool calls + results</p>
+        </div>
+      </div>
+      <div class="component">
+        <div class="component-icon">&#9731;</div>
+        <div class="component-text">
+          <h4>Memory Viewer</h4>
+          <p>What ARIA has learned about you</p>
+        </div>
+      </div>
+      <div class="component" style="margin-top:auto; background:#ff4a9e10; border-color:#ff4a9e30;">
+        <div class="component-icon" style="background:#ff4a9e30;">&#9094;</div>
+        <div class="component-text">
+          <h4>Voice + Text Input</h4>
+          <p>Web Speech API, zero polling</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Data Flow -->
+  <div class="flow-bar">
+    <div class="flow-step"><span>Button Press</span></div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-step"><span>Voice Stream</span> (24kHz)</div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-step"><span>GPT-5.2</span> reasons + tools</div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-step"><span>ElevenLabs</span> voice clone</div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-step"><span>AirPods</span> output</div>
+  </div>
+
+  <!-- APIs -->
+  <div class="apis-bar">
+    <span class="apis-label">7 APIs Integrated</span>
+    <span class="api-tag api-openai">OpenAI Realtime</span>
+    <span class="api-tag api-openai">GPT-5.2</span>
+    <span class="api-tag api-openai">Whisper</span>
+    <span class="api-tag api-openai">OpenAI TTS</span>
+    <span class="api-tag api-eleven">ElevenLabs Flash v2.5</span>
+    <span class="api-tag api-brave">Brave Search</span>
+    <span class="api-tag api-twitter">X / Twitter API</span>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-bar">
+    <div class="stat">
+      <div class="stat-value">3</div>
+      <div class="stat-label">Compute Layers</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">10</div>
+      <div class="stat-label">Agentic Tools</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">7</div>
+      <div class="stat-label">API Integrations</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">3</div>
+      <div class="stat-label">WebSocket Channels</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">5</div>
+      <div class="stat-label">Database Tables</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">$30</div>
+      <div class="stat-label">Total Hardware Cost</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

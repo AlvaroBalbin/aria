@@ -1,14 +1,14 @@
-# ARIA - Your Wearable AI That Actually Works
+# ARIA - The AI Companion That Actually Works
 
 > **Plug it in. Connect to any network. Hold the button and speak. Get answers in your AirPods - in your own cloned voice. Anywhere.**
 
-Built in 24 hours at **Bath Hack 2026**. A wearable AI assistant that knows you, remembers your entire day, searches the web in real time, manages your calendar, and takes real actions - all running on a Raspberry Pi 5 you own.
+Built in 24 hours at **Bath Hack 2026**. An AI companion that knows you, remembers your entire day, searches the web in real time, manages your calendar, and takes real actions - all running on a Raspberry Pi 5 you own.
 
-**Works on any WiFi, any network, anywhere you go. The Pi creates its own hotspot - the wearable auto-connects. Tether your phone, plug into hotel WiFi, use campus ethernet. ARIA just works.**
+**Works on any WiFi, any network, anywhere you go. The Pi creates its own hotspot - the companion auto-connects. Tether your phone, plug into hotel WiFi, use campus ethernet. ARIA just works.**
 
 **Total hardware cost: ~$30. No subscription. All data stays on your device.**
 
-![ARIA Device](https://img.shields.io/badge/ESP32-Wearable-blue) ![Python](https://img.shields.io/badge/Python-3.11-green) ![OpenAI](https://img.shields.io/badge/GPT--5.2-Agentic-orange) ![License](https://img.shields.io/badge/License-MIT-yellow)
+![ARIA Device](https://img.shields.io/badge/ESP32-Companion-blue) ![Python](https://img.shields.io/badge/Python-3.11-green) ![OpenAI](https://img.shields.io/badge/GPT--5.2-Agentic-orange) ![License](https://img.shields.io/badge/License-MIT-yellow)
 
 ---
 
@@ -27,7 +27,7 @@ They built expensive hardware looking for a use case. We built the use case firs
 ```
 You press the button and speak
              |
-   [ESP32 Wearable]                 [Raspberry Pi 5 Base Station]
+   [ESP32 Companion]                 [Raspberry Pi 5 Base Station]
     Button + LEDs       --WiFi-->    FastAPI orchestration server
     TFT Display         <--WiFi--    OpenAI Realtime voice-to-voice
     State machine                    GPT-5.2 agentic brain (10 tools)
@@ -39,11 +39,11 @@ You press the button and speak
                                       in your own cloned voice
 ```
 
-> The Pi 5 creates its own WiFi hotspot (`ARIA-BASE`). The wearable auto-connects to it. Give the Pi any internet connection - phone hotspot, campus WiFi, ethernet cable - and the whole system is live in seconds. No setup, no configuration, no router needed.
+> The Pi 5 creates its own WiFi hotspot (`ARIA-BASE`). The companion auto-connects to it. Give the Pi any internet connection - phone hotspot, campus WiFi, ethernet cable - and the whole system is live in seconds. No setup, no configuration, no router needed.
 
 ### The Full Pipeline
 
-1. **Press the button** on the wearable box
+1. **Press the button** on the companion box
 2. **Speak naturally** - OpenAI Realtime API streams your voice at 24kHz with server-side VAD
 3. **GPT-5.2 reasons** using an agentic tool loop (up to 6 chained tool calls per query)
 4. **ARIA responds** through your AirPods in your own cloned voice via ElevenLabs
@@ -127,7 +127,7 @@ Every component has fallbacks. If one API goes down, ARIA keeps working:
 Voice I/O:    OpenAI Realtime --> Whisper + GPT + ElevenLabs --> Whisper + GPT + OpenAI TTS --> espeak
 Web Search:   Brave API --> DuckDuckGo (free, no API key needed)
 Audio Play:   mpg123 --> ffplay --> espeak direct
-Wearable:     WiFi drops --> state/text queued, delivered on reconnect
+Companion:     WiFi drops --> state/text queued, delivered on reconnect
 Network:      Pi hotspot auto-creates local mesh --> any internet source works (phone, ethernet, WiFi)
 ```
 
@@ -135,7 +135,7 @@ Network:      Pi hotspot auto-creates local mesh --> any internet source works (
 
 ## Hardware
 
-### Wearable Device
+### The Companion
 
 - **MCU**: ESP32 (WiFi + Bluetooth)
 - **Display**: ST7789 240x320 TFT (SPI) - shows ARIA's responses with word-wrapping
@@ -165,7 +165,7 @@ Network:      Pi hotspot auto-creates local mesh --> any internet source works (
 | Push button + wiring | ~$1 |
 | 3D-printed enclosure | ~$3 |
 | Raspberry Pi 5 (base station) | ~$60 (one-time, shared) |
-| **Wearable total** | **~$16** |
+| **Companion device total** | **~$16** |
 
 ---
 
@@ -233,7 +233,7 @@ Day 2: "What's my name?"        --> "You're Alvaro! How's the CS coursework goin
 
 ### Unit Economics
 
-- **BOM cost**: ~$16 (wearable only)
+- **BOM cost**: ~$16 (companion only)
 - **Retail price**: $149 (kit with setup guide)
 - **Gross margin**: ~89%
 - **No recurring cloud costs** for self-hosted users (runs on your own Pi)
@@ -315,7 +315,7 @@ aria/
 
 ### Most Technically Impressive
 
-Built a **complete distributed edge AI system in 24 hours** spanning 3 hardware layers, 3 WebSocket channels, 7 API integrations, a 10-tool agentic reasoning loop, real-time voice-to-voice streaming, automatic memory extraction, and graceful multi-level fallbacks. The system handles wearable disconnection, API failures, and network drops without losing conversation state.
+Built a **complete distributed edge AI system in 24 hours** spanning 3 hardware layers, 3 WebSocket channels, 7 API integrations, a 10-tool agentic reasoning loop, real-time voice-to-voice streaming, automatic memory extraction, and graceful multi-level fallbacks. The system handles companion disconnection, API failures, and network drops without losing conversation state.
 
 ### Best Use of AI
 
@@ -323,7 +323,7 @@ AI isn't a bolt-on feature - it's the entire product. **GPT-5.2** powers an agen
 
 ### Best Use of Embedded Systems
 
-The ESP32 wearable runs a **real-time state machine** synced over WebSocket to the Pi 5. It drives a TFT display with word-wrapped text rendering, 4 PWM-animated RGB LEDs with sine-wave breathing patterns, and handles WiFi reconnection with queued state delivery. The Raspberry Pi 5 serves as an **edge AI server** running STT, LLM inference, TTS, and Bluetooth audio - no cloud compute required for the core pipeline.
+The ESP32 companion runs a **real-time state machine** synced over WebSocket to the Pi 5. It drives a TFT display with word-wrapped text rendering, 4 PWM-animated RGB LEDs with sine-wave breathing patterns, and handles WiFi reconnection with queued state delivery. The Raspberry Pi 5 serves as an **edge AI server** running STT, LLM inference, TTS, and Bluetooth audio - no cloud compute required for the core pipeline.
 
 ### Most Commercially Viable
 
@@ -341,7 +341,7 @@ Picture this: you walk up to our table. You see a glowing box. Someone presses a
 
 ### Best Overall
 
-ARIA combines a custom 3D-printed wearable, a distributed three-layer architecture, 7 API integrations, 10 agentic tools, real-time voice cloning, persistent memory, ambient intelligence, a live dashboard, and a validated commercial model with 60+ waitlist signups - all built from scratch in 24 hours by a small team. Plug it into any network and it just works. You can try it right now.
+ARIA combines a custom 3D-printed companion, a distributed three-layer architecture, 7 API integrations, 10 agentic tools, real-time voice cloning, persistent memory, ambient intelligence, a live dashboard, and a validated commercial model with 60+ waitlist signups - all built from scratch in 24 hours by a small team. Plug it into any network and it just works. You can try it right now.
 
 ---
 

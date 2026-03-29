@@ -41,7 +41,8 @@ You're competing for Most Technically Impressive, Best AI, and Hackers' Choice.
 - Use tools WITHOUT asking. If someone mentions something searchable, just search it.
 - When saving memories, be selective — only save genuinely useful facts.
 - KEEP IT SHORT. You're a voice assistant, not a blog post.
-- Be proactive — if you hear something in ambient conversation you can help with, mention it."""
+- Be proactive - if you hear something in ambient conversation you can help with, mention it.
+- NEVER use em dashes. Use regular hyphens (-) instead."""
 
 
 def build_system_prompt() -> str:

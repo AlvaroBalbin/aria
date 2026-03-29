@@ -1,5 +1,5 @@
 /**
- * ARIA Pendant Firmware — Arduino Nano ESP32
+ * ARIA Pendant Firmware  - Arduino Nano ESP32
  *
  * What this does:
  *   - Tap the button → tells Pi 5 to start/stop listening (toggle)
@@ -44,7 +44,7 @@ void onWebSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
     setState(IDLE);
 
   } else if (type == WStype_DISCONNECTED) {
-    Serial.println("WS disconnected — reconnecting...");
+    Serial.println("WS disconnected  - reconnecting...");
     wsConnected = false;
 
   } else if (type == WStype_TEXT) {
@@ -106,7 +106,7 @@ void connectWiFi() {
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("\nConnected! IP: " + WiFi.localIP().toString());
   } else {
-    Serial.println("\nFAILED — status: " + String(WiFi.status()));
+    Serial.println("\nFAILED  - status: " + String(WiFi.status()));
     Serial.println("0=IDLE 1=NO_SSID 2=SCAN_DONE 3=CONNECTED 4=CONNECT_FAILED 6=DISCONNECTED");
   }
 }
@@ -142,7 +142,7 @@ void loop() {
   if (millis() - lastWiFiCheck > 5000) {
     lastWiFiCheck = millis();
     if (WiFi.status() != WL_CONNECTED) {
-      Serial.println("WiFi lost — reconnecting...");
+      Serial.println("WiFi lost  - reconnecting...");
       wsConnected = false;
       showReconnecting();
       WiFi.disconnect();
@@ -156,7 +156,7 @@ void loop() {
       if (WiFi.status() == WL_CONNECTED) {
         Serial.println("\nWiFi reconnected: " + WiFi.localIP().toString());
       } else {
-        Serial.println("\nWiFi reconnect failed — will retry");
+        Serial.println("\nWiFi reconnect failed  - will retry");
         return;
       }
     }
@@ -182,7 +182,7 @@ void loop() {
 
   // Timeout: if stuck in non-idle state for >90s, reset to idle
   if (currentState != IDLE && (millis() - lastStateChange > 90000)) {
-    Serial.println("State timeout — resetting to IDLE");
+    Serial.println("State timeout  - resetting to IDLE");
     lastText = "";
     setState(IDLE);
   }

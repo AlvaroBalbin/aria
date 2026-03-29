@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARIA - Commercial Viability</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0a0f;
+    color: #e0e0e0;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 40px;
+  }
+  .container {
+    width: 1200px;
+    max-width: 100%;
+  }
+  h1 {
+    text-align: center;
+    font-size: 36px;
+    font-weight: 700;
+    margin-bottom: 4px;
+    letter-spacing: 6px;
+    color: #fff;
+  }
+  .subtitle {
+    text-align: center;
+    font-size: 14px;
+    color: #888;
+    margin-bottom: 48px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  .section-title {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    color: #888;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #222;
+  }
+
+  /* Competitor Table */
+  .competitor-section { margin-bottom: 48px; }
+  .comp-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .comp-table th {
+    text-align: left;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: #666;
+    padding: 12px 16px;
+    border-bottom: 1px solid #222;
+  }
+  .comp-table td {
+    padding: 16px;
+    border-bottom: 1px solid #151518;
+    font-size: 14px;
+  }
+  .comp-table tr:last-child td { border-bottom: none; }
+  .comp-row-aria {
+    background: linear-gradient(90deg, #4aff9e08, #4aff9e15, #4aff9e08);
+    border: 1px solid #4aff9e30 !important;
+    border-radius: 8px;
+  }
+  .comp-row-aria td {
+    color: #fff;
+    font-weight: 600;
+    border-bottom: none !important;
+  }
+  .comp-name {
+    font-weight: 600;
+    color: #ddd;
+  }
+  .comp-funding { color: #ff6b6b; font-weight: 600; }
+  .comp-aria-funding { color: #4aff9e !important; }
+  .status-failed {
+    display: inline-block;
+    background: #ff4a4a20;
+    color: #ff6b6b;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .status-struggling {
+    display: inline-block;
+    background: #ffaa4a20;
+    color: #ffaa4a;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .status-early {
+    display: inline-block;
+    background: #88888820;
+    color: #999;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .status-live {
+    display: inline-block;
+    background: #4aff9e20;
+    color: #4aff9e;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .comp-price { font-weight: 600; color: #ccc; }
+  .comp-advantage { color: #aaa; font-size: 13px; }
+  .comp-row-aria .comp-advantage { color: #4aff9e; }
+
+  /* Unit Economics */
+  .economics-section { margin-bottom: 48px; }
+  .econ-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  .econ-card {
+    background: #111116;
+    border: 1px solid #222;
+    border-radius: 14px;
+    padding: 32px;
+  }
+  .econ-card-highlight {
+    background: linear-gradient(135deg, #1a2e1a, #162e22);
+    border-color: #4aff9e30;
+  }
+  .econ-label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: #777;
+    margin-bottom: 8px;
+  }
+  .econ-value {
+    font-size: 48px;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+  .econ-value-green { color: #4aff9e; }
+  .econ-detail {
+    font-size: 13px;
+    color: #888;
+    line-height: 1.5;
+  }
+
+  /* Margin Bar */
+  .margin-bar-container {
+    margin-top: 24px;
+    background: #111116;
+    border: 1px solid #222;
+    border-radius: 14px;
+    padding: 28px 32px;
+  }
+  .margin-bar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .margin-bar-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #ddd;
+  }
+  .margin-bar-percent {
+    font-size: 28px;
+    font-weight: 700;
+    color: #4aff9e;
+  }
+  .margin-bar-track {
+    height: 24px;
+    background: #1a1a22;
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+  }
+  .margin-bar-cost {
+    width: 11%;
+    background: linear-gradient(90deg, #ff6b6b, #ff8888);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: #fff;
+    border-radius: 12px 0 0 12px;
+  }
+  .margin-bar-profit {
+    width: 89%;
+    background: linear-gradient(90deg, #2a8a5a, #4aff9e);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: #000;
+    border-radius: 0 12px 12px 0;
+  }
+  .margin-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 8px;
+  }
+  .margin-label {
+    font-size: 11px;
+    color: #666;
+  }
+
+  /* Traction */
+  .traction-section { margin-bottom: 48px; }
+  .traction-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+  }
+  .traction-card {
+    background: #111116;
+    border: 1px solid #222;
+    border-radius: 14px;
+    padding: 28px 24px;
+    text-align: center;
+  }
+  .traction-value {
+    font-size: 42px;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+  .traction-value-accent { color: #4a9eff; }
+  .traction-label {
+    font-size: 12px;
+    color: #777;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 8px;
+  }
+  .traction-detail {
+    font-size: 11px;
+    color: #555;
+    line-height: 1.4;
+  }
+
+  /* Revenue Model */
+  .revenue-section { margin-bottom: 48px; }
+  .revenue-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+  }
+  .revenue-card {
+    background: #111116;
+    border: 1px solid #222;
+    border-radius: 14px;
+    padding: 24px;
+    position: relative;
+  }
+  .revenue-card-free {
+    border-color: #ffffff20;
+  }
+  .revenue-card-kit {
+    border-color: #4a9eff40;
+    background: linear-gradient(135deg, #111116, #11162e);
+  }
+  .revenue-card-saas {
+    border-color: #4aff9e40;
+    background: linear-gradient(135deg, #111116, #112e1a);
+  }
+  .revenue-card-enterprise {
+    border-color: #ffd70040;
+    background: linear-gradient(135deg, #111116, #2e2a11);
+  }
+  .revenue-tier {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: #888;
+    margin-bottom: 8px;
+  }
+  .revenue-price {
+    font-size: 28px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 4px;
+  }
+  .revenue-period {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 16px;
+  }
+  .revenue-features {
+    list-style: none;
+    font-size: 12px;
+    color: #999;
+    line-height: 2;
+  }
+  .revenue-features li::before {
+    content: "+  ";
+    color: #4aff9e;
+    font-weight: 700;
+  }
+
+  /* Bottom line */
+  .bottom-line {
+    background: linear-gradient(90deg, #4aff9e10, #4aff9e20, #4aff9e10);
+    border: 1px solid #4aff9e30;
+    border-radius: 14px;
+    padding: 24px 32px;
+    text-align: center;
+    font-size: 16px;
+    color: #ccc;
+    line-height: 1.6;
+  }
+  .bottom-line strong { color: #4aff9e; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>ARIA</h1>
+  <p class="subtitle">Commercial Viability & Market Position</p>
+
+  <!-- Competitor Comparison -->
+  <div class="competitor-section">
+    <div class="section-title">Competitor Landscape - $435M raised, none delivered</div>
+    <table class="comp-table">
+      <thead>
+        <tr>
+          <th>Company</th>
+          <th>Funding</th>
+          <th>Status</th>
+          <th>Device Price</th>
+          <th>Subscription</th>
+          <th>Key Issue</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="comp-name">Humane AI Pin</td>
+          <td class="comp-funding">$230M</td>
+          <td><span class="status-failed">Failed / Recalled</span></td>
+          <td class="comp-price">$699</td>
+          <td>$24/mo</td>
+          <td class="comp-advantage">Overheating, terrible UX, shut down</td>
+        </tr>
+        <tr>
+          <td class="comp-name">Rabbit R1</td>
+          <td class="comp-funding">$180M</td>
+          <td><span class="status-struggling">Struggling</span></td>
+          <td class="comp-price">$199</td>
+          <td>None</td>
+          <td class="comp-advantage">Android app wrapper, not real AI</td>
+        </tr>
+        <tr>
+          <td class="comp-name">Limitless</td>
+          <td class="comp-funding">$25M</td>
+          <td><span class="status-early">Early</span></td>
+          <td class="comp-price">$99</td>
+          <td>$19/mo</td>
+          <td class="comp-advantage">Record-only, no actions, no voice output</td>
+        </tr>
+        <tr>
+          <td class="comp-name">Tab AI</td>
+          <td class="comp-funding">$2M</td>
+          <td><span class="status-early">Early</span></td>
+          <td class="comp-price">$49</td>
+          <td>$8/mo</td>
+          <td class="comp-advantage">Closed-source, limited tools</td>
+        </tr>
+        <tr class="comp-row-aria" style="border-radius:8px;">
+          <td class="comp-name" style="color:#4aff9e; font-size:16px;">ARIA</td>
+          <td class="comp-aria-funding" style="color:#4aff9e;">$0</td>
+          <td><span class="status-live">Live & Working</span></td>
+          <td class="comp-price" style="color:#4aff9e;">~$30</td>
+          <td style="color:#4aff9e;">$0 (self-hosted)</td>
+          <td class="comp-advantage">Open-source, private, works anywhere</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Unit Economics -->
+  <div class="economics-section">
+    <div class="section-title">Unit Economics</div>
+    <div class="econ-grid">
+      <div class="econ-card">
+        <div class="econ-label">Bill of Materials</div>
+        <div class="econ-value">$16</div>
+        <div class="econ-detail">
+          ESP32 ($5) + TFT Display ($5) + LEDs ($2) + Button ($1) + 3D Print ($3)
+        </div>
+      </div>
+      <div class="econ-card">
+        <div class="econ-label">Retail Kit Price</div>
+        <div class="econ-value">$149</div>
+        <div class="econ-detail">
+          Companion device + base station setup guide + pre-flashed firmware
+        </div>
+      </div>
+      <div class="econ-card econ-card-highlight">
+        <div class="econ-label">Gross Margin</div>
+        <div class="econ-value econ-value-green">89%</div>
+        <div class="econ-detail">
+          $133 profit per kit sold. No recurring infrastructure costs for self-hosted users.
+        </div>
+      </div>
+      <div class="econ-card">
+        <div class="econ-label">Cloud Cost Per User</div>
+        <div class="econ-value">$0</div>
+        <div class="econ-detail">
+          All compute runs on user's own Pi 5. API costs paid by user directly. Zero server overhead.
+        </div>
+      </div>
+    </div>
+
+    <div class="margin-bar-container">
+      <div class="margin-bar-header">
+        <div class="margin-bar-title">Revenue Breakdown Per $149 Kit</div>
+        <div class="margin-bar-percent">89% margin</div>
+      </div>
+      <div class="margin-bar-track">
+        <div class="margin-bar-cost">$16</div>
+        <div class="margin-bar-profit">$133 profit</div>
+      </div>
+      <div class="margin-labels">
+        <span class="margin-label">BOM + assembly</span>
+        <span class="margin-label">Gross profit</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Traction -->
+  <div class="traction-section">
+    <div class="section-title">Traction - Validated During the Hackathon</div>
+    <div class="traction-grid">
+      <div class="traction-card">
+        <div class="traction-value traction-value-accent">60+</div>
+        <div class="traction-label">Waitlist Signups</div>
+        <div class="traction-detail">Organic interest within 24 hours of first announcement</div>
+      </div>
+      <div class="traction-card">
+        <div class="traction-value traction-value-accent">100+</div>
+        <div class="traction-label">B2B Prospects</div>
+        <div class="traction-detail">LinkedIn outreach to professionals in sales, meetings, accessibility</div>
+      </div>
+      <div class="traction-card">
+        <div class="traction-value">24h</div>
+        <div class="traction-label">Build Time</div>
+        <div class="traction-detail">Full hardware + software + 3D printed enclosure in one hackathon</div>
+      </div>
+      <div class="traction-card">
+        <div class="traction-value">$0</div>
+        <div class="traction-label">Marketing Spend</div>
+        <div class="traction-detail">All traction organic - word of mouth and direct outreach only</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Revenue Model -->
+  <div class="revenue-section">
+    <div class="section-title">Revenue Model</div>
+    <div class="revenue-grid">
+      <div class="revenue-card revenue-card-free">
+        <div class="revenue-tier">Open Source</div>
+        <div class="revenue-price">Free</div>
+        <div class="revenue-period">forever</div>
+        <ul class="revenue-features">
+          <li>Full source code</li>
+          <li>Self-hosted on your Pi</li>
+          <li>All 10 tools included</li>
+          <li>Community support</li>
+        </ul>
+      </div>
+      <div class="revenue-card revenue-card-kit">
+        <div class="revenue-tier">ARIA Kit</div>
+        <div class="revenue-price">$149</div>
+        <div class="revenue-period">one-time</div>
+        <ul class="revenue-features">
+          <li>Pre-built companion</li>
+          <li>Pre-flashed firmware</li>
+          <li>Setup guide</li>
+          <li>Voice clone setup</li>
+        </ul>
+      </div>
+      <div class="revenue-card revenue-card-saas">
+        <div class="revenue-tier">ARIA Pro</div>
+        <div class="revenue-price">$9</div>
+        <div class="revenue-period">per month</div>
+        <ul class="revenue-features">
+          <li>Cloud-hosted brain</li>
+          <li>Premium voices</li>
+          <li>Mobile companion app</li>
+          <li>Priority support</li>
+        </ul>
+      </div>
+      <div class="revenue-card revenue-card-enterprise">
+        <div class="revenue-tier">Enterprise</div>
+        <div class="revenue-price">Custom</div>
+        <div class="revenue-period">per seat</div>
+        <ul class="revenue-features">
+          <li>Meeting intelligence</li>
+          <li>Sales coaching</li>
+          <li>Team memory sharing</li>
+          <li>SSO + compliance</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Line -->
+  <div class="bottom-line">
+    Competitors raised <strong>$435M combined</strong> and failed to ship what we built in <strong>24 hours</strong> for <strong>$30</strong>.<br>
+    ARIA works today. It works on <strong>any network, anywhere</strong>. And <strong>60+ people</strong> already want one.
+  </div>
+</div>
+</body>
+</html>

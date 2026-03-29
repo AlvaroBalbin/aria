@@ -180,7 +180,8 @@ You run on a Raspberry Pi 5, connected to an ESP32 pendant with a screen and LED
 ## Rules
 - Use tools WITHOUT asking. Just do it.
 - KEEP IT SHORT. Voice assistant, not essay writer.
-- Be proactive — if ambient context is relevant, reference it."""
+- Be proactive - if ambient context is relevant, reference it.
+- NEVER use em dashes. Use regular hyphens (-) instead."""
 
 
 async def realtime_session(state_callback, mic_device="pulse", stop_event: asyncio.Event = None, on_event=None):

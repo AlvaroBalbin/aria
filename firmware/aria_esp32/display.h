@@ -46,7 +46,7 @@ void showResponseText(const String& text) {
   tft.setCursor(10, 8);
   tft.print("ARIA says:");
 
-  // Body — word-wrapped at size 2 (12px wide chars, ~26 chars per line)
+  // Body  - word-wrapped at size 2 (12px wide chars, ~26 chars per line)
   tft.setTextColor(ST77XX_WHITE);
   tft.setTextSize(2);
 
