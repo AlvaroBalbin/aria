@@ -48,24 +48,32 @@ void onWebSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
     wsConnected = false;
 
   } else if (type == WStype_TEXT) {
-    StaticJsonDocument<256> doc;
-    if (!deserializeJson(doc, payload, length)) {
-      // Handle state updates
-      const char* state = doc["state"];
-      if (state) {
-        if      (strcmp(state, "idle")       == 0) { lastText = ""; setState(IDLE); }
-        else if (strcmp(state, "listening")  == 0) { lastText = ""; setState(LISTENING); }
-        else if (strcmp(state, "processing") == 0) setState(PROCESSING);
-        else if (strcmp(state, "speaking")   == 0) setState(SPEAKING);
-      }
+    Serial.print("WS recv: ");
+    Serial.println((char*)payload);
 
-      // Handle response text for OLED display
-      const char* text = doc["text"];
-      if (text) {
-        Serial.print("Display text: ");
-        Serial.println(text);
-        showResponseText(String(text));
-      }
+    StaticJsonDocument<512> doc;
+    DeserializationError err = deserializeJson(doc, payload, length);
+    if (err) {
+      Serial.print("JSON parse error: ");
+      Serial.println(err.c_str());
+      return;
+    }
+
+    // Handle state updates
+    const char* state = doc["state"];
+    if (state) {
+      if      (strcmp(state, "idle")       == 0) { lastText = ""; showingText = false; setState(IDLE); }
+      else if (strcmp(state, "listening")  == 0) { lastText = ""; showingText = false; setState(LISTENING); }
+      else if (strcmp(state, "processing") == 0) setState(PROCESSING);
+      else if (strcmp(state, "speaking")   == 0) setState(SPEAKING);
+    }
+
+    // Handle response text for OLED display
+    const char* text = doc["text"];
+    if (text) {
+      Serial.print("Display text: ");
+      Serial.println(text);
+      showResponseText(String(text));
     }
   }
 }
