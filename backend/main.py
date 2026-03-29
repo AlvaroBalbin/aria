@@ -1,6 +1,6 @@
 """
 ARIA Backend — FastAPI server running on Raspberry Pi 5
-Handles: ESP32 audio WebSocket, Claude brain, TTS, dashboard push
+Handles: pendant WebSocket, Claude brain, TTS, ambient listening, dashboard
 """
 import asyncio
 import json
@@ -15,7 +15,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from db import init_db, save_transcript, get_transcript, get_all_memories, save_conversation_turn
-from transcriber import transcribe_bytes, record_and_transcribe
+from transcriber import transcribe_bytes, record_and_transcribe, record_ambient_chunk
 from brain import ask
 from tts import speak
 from memory import memory_extraction_loop
@@ -28,9 +28,9 @@ dashboard_clients: set[WebSocket] = set()
 async def lifespan(app: FastAPI):
     init_db()
     print("DB initialised")
-    # Start background memory extraction loop
     asyncio.create_task(memory_extraction_loop())
     asyncio.create_task(ambient_check_loop())
+    asyncio.create_task(ambient_listen_loop())
     yield
 
 
@@ -53,6 +53,29 @@ async def broadcast(event: str, data: dict):
     dashboard_clients -= dead
 
 
+# ── Ambient listening (24/7) ─────────────────────────────────────────────────
+
+ambient_enabled = True  # toggle via API if needed
+
+async def ambient_listen_loop():
+    """Continuously record + transcribe ambient audio in 15s chunks."""
+    print("Ambient listening started — recording environment 24/7")
+    loop = asyncio.get_event_loop()
+    while True:
+        if not ambient_enabled:
+            await asyncio.sleep(5)
+            continue
+        try:
+            text = await loop.run_in_executor(None, record_ambient_chunk)
+            if text and text.strip() and len(text.strip()) > 5:
+                print(f"[Ambient] {text}")
+                save_transcript(text, speaker="Ambient")
+                await broadcast("transcript", {"speaker": "Ambient", "text": text, "ts": time.time()})
+        except Exception as e:
+            print(f"Ambient listen error: {e}")
+            await asyncio.sleep(5)
+
+
 # ── ESP32 audio WebSocket ─────────────────────────────────────────────────────
 
 @app.websocket("/ws/audio")
@@ -60,27 +83,23 @@ async def audio_ws(websocket: WebSocket):
     await websocket.accept()
     print("Pendant connected")
     audio_buffer = bytearray()
-    pendant_state = "idle"
 
     try:
         while True:
             data = await websocket.receive()
 
             if "bytes" in data:
-                # Binary frame: raw PCM audio from ESP32
                 audio_buffer.extend(data["bytes"])
 
             elif "text" in data:
                 msg = json.loads(data["text"])
 
                 if msg.get("event") == "end_of_speech":
-                    # Button released — process the accumulated audio
                     if audio_buffer:
-                        print(f"Processing {len(audio_buffer)} bytes of audio…")
+                        print(f"Processing {len(audio_buffer)} bytes of audio...")
                         await broadcast("pendant_state", {"state": "processing"})
                         await websocket.send_text(json.dumps({"state": "processing"}))
 
-                        # Transcribe in thread (blocks CPU)
                         pcm = bytes(audio_buffer)
                         audio_buffer.clear()
                         loop = asyncio.get_event_loop()
@@ -91,7 +110,6 @@ async def audio_ws(websocket: WebSocket):
                             save_transcript(text, speaker="User")
                             await broadcast("transcript", {"speaker": "User", "text": text, "ts": time.time()})
 
-                            # Get Claude response (also in thread)
                             await broadcast("pendant_state", {"state": "processing"})
                             response = await loop.run_in_executor(None, ask, text)
 
@@ -101,7 +119,6 @@ async def audio_ws(websocket: WebSocket):
                             await broadcast("pendant_state", {"state": "speaking"})
                             await websocket.send_text(json.dumps({"state": "speaking"}))
 
-                            # Speak (in thread so we don't block)
                             await loop.run_in_executor(None, speak, response)
                         else:
                             print("Nothing intelligible heard.")
@@ -111,8 +128,7 @@ async def audio_ws(websocket: WebSocket):
                         audio_buffer.clear()
 
                 elif msg.get("pendant_state"):
-                    pendant_state = msg["pendant_state"]
-                    await broadcast("pendant_state", {"state": pendant_state})
+                    await broadcast("pendant_state", {"state": msg["pendant_state"]})
 
     except WebSocketDisconnect:
         print("Pendant disconnected")
@@ -124,8 +140,8 @@ async def audio_ws(websocket: WebSocket):
 async def pendant_ws(websocket: WebSocket):
     """
     Pendant connects here. On button_press:
-      1. Pi records from AirPods/system mic (arecord)
-      2. Transcribes → Claude → TTS
+      1. Pi records from AirPods/system mic
+      2. Transcribes → GPT → TTS
       3. Sends state updates back to pendant LEDs + OLED
     """
     await websocket.accept()
@@ -149,8 +165,13 @@ async def pendant_ws(websocket: WebSocket):
 
                 loop = asyncio.get_event_loop()
 
-                # Record from AirPods mic (blocking — run in thread)
+                # Pause ambient listening while recording user speech
+                global ambient_enabled
+                ambient_enabled = False
+
                 text = await loop.run_in_executor(None, record_and_transcribe)
+
+                ambient_enabled = True
 
                 if not text.strip():
                     print("Nothing heard.")
@@ -162,19 +183,21 @@ async def pendant_ws(websocket: WebSocket):
                 await broadcast("transcript", {"speaker": "User", "text": text, "ts": time.time()})
                 await send_state("processing")
 
-                # Claude response
                 response = await loop.run_in_executor(None, ask, text)
                 print(f"ARIA: {response}")
                 save_transcript(response, speaker="ARIA")
                 await broadcast("transcript", {"speaker": "ARIA", "text": response, "ts": time.time()})
                 await send_state("speaking")
 
-                # Speak (ElevenLabs → AirPods)
                 await loop.run_in_executor(None, speak, response)
                 await send_state("idle")
 
     except WebSocketDisconnect:
         print("Pendant disconnected")
+        ambient_enabled = True
+    except Exception as e:
+        print(f"Pendant handler crashed: {e}")
+        ambient_enabled = True
 
 
 # ── Dashboard WebSocket ───────────────────────────────────────────────────────
@@ -185,7 +208,6 @@ async def dashboard_ws(websocket: WebSocket):
     dashboard_clients.add(websocket)
     print(f"Dashboard connected ({len(dashboard_clients)} total)")
 
-    # Send current state on connect
     rows = get_transcript(minutes=60)
     await websocket.send_text(json.dumps({
         "event": "history",
@@ -195,7 +217,7 @@ async def dashboard_ws(websocket: WebSocket):
 
     try:
         while True:
-            await websocket.receive_text()  # keep alive
+            await websocket.receive_text()
     except WebSocketDisconnect:
         dashboard_clients.discard(websocket)
         print("Dashboard disconnected")
@@ -232,6 +254,13 @@ async def transcript_endpoint(minutes: int = 30):
 @app.get("/memories")
 async def memories_endpoint():
     return get_all_memories()
+
+
+@app.post("/ambient/toggle")
+async def toggle_ambient():
+    global ambient_enabled
+    ambient_enabled = not ambient_enabled
+    return {"ambient_enabled": ambient_enabled}
 
 
 # ── Background: check reminders ───────────────────────────────────────────────
