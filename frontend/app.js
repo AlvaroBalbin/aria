@@ -17,9 +17,10 @@ function connect() {
 
   ws.onmessage = (evt) => {
     const msg = JSON.parse(evt.data);
-    if (msg.event === 'history')          handleHistory(msg);
-    else if (msg.event === 'transcript')  handleTranscript(msg);
+    if (msg.event === 'history')            handleHistory(msg);
+    else if (msg.event === 'transcript')    handleTranscript(msg);
     else if (msg.event === 'pendant_state') handleState(msg.state);
+    else if (msg.event === 'tool_use')      handleToolUse(msg);
   };
 
   ws.onclose = () => {
@@ -33,15 +34,29 @@ function handleHistory({ transcript, memories }) {
   if (memories) {
     memoryCount = memories.length;
     document.getElementById('memory-count').textContent = `${memoryCount} memories`;
+    memories.forEach(m => addMemoryItem(m));
   }
 }
 
 function handleTranscript({ speaker, text, ts }) {
   addTranscriptEntry({ speaker, text, ts });
-  // Mirror ARIA turns to convo panel as well
-  if (speaker === 'ARIA') {
+  if (speaker === 'User' || speaker === 'ARIA') {
     addConvoEntry({ speaker, text, ts });
   }
+}
+
+function handleToolUse({ tool, args, result, ts }) {
+  const panel = document.getElementById('activity-panel');
+  const div = document.createElement('div');
+  div.className = 'tool-item';
+  div.innerHTML = `
+    <div class="tool-name">${escHtml(tool)}</div>
+    <div class="tool-args">${escHtml(JSON.stringify(args))}</div>
+    <div class="tool-result">${escHtml(result.substring(0, 150))}</div>
+    <div class="entry-time">${fmtTime(ts)}</div>
+  `;
+  panel.appendChild(div);
+  panel.scrollTop = panel.scrollHeight;
 }
 
 function handleState(state) {
@@ -59,7 +74,7 @@ function fmtTime(ts) {
 }
 
 function makeEntry({ speaker, text, ts }) {
-  const cls = speaker === 'ARIA' ? 'aria' : 'user';
+  const cls = speaker === 'ARIA' ? 'aria' : speaker === 'Ambient' ? 'ambient' : 'user';
   const div = document.createElement('div');
   div.className = `entry ${cls}`;
   div.innerHTML = `
@@ -82,8 +97,19 @@ function addConvoEntry(entry) {
   panel.scrollTop = panel.scrollHeight;
 }
 
+function addMemoryItem(m) {
+  const panel = document.getElementById('activity-panel');
+  const div = document.createElement('div');
+  div.className = 'memory-item';
+  div.innerHTML = `
+    <div class="memory-key">${escHtml(m.key || m.category || '')}</div>
+    <div class="memory-val">${escHtml(m.value || m.content || '')}</div>
+  `;
+  panel.appendChild(div);
+}
+
 function escHtml(str) {
-  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 // ── Chat input ────────────────────────────────────────────────────────────────
@@ -108,7 +134,6 @@ async function sendMessage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text }),
     });
-    // ARIA response comes back via WebSocket broadcast — no need to add here
   } catch (e) {
     console.error('Query failed:', e);
   }

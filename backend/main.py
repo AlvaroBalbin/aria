@@ -24,6 +24,12 @@ from realtime import realtime_session
 # Connected dashboard browsers (for live push)
 dashboard_clients: set[WebSocket] = set()
 
+# ── Global state ─────────────────────────────────────────────────────────────
+active_pendant_ws: WebSocket | None = None
+session_task: asyncio.Task | None = None
+session_stop_event: asyncio.Event | None = None
+ambient_enabled = True
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -54,12 +60,117 @@ async def broadcast(event: str, data: dict):
     dashboard_clients -= dead
 
 
-# ── Ambient listening (24/7) ─────────────────────────────────────────────────
+# ── Pendant helpers ──────────────────────────────────────────────────────────
 
-ambient_enabled = True  # toggle via API if needed
+async def send_pendant_state(state: str):
+    """Send state to pendant + dashboard."""
+    if active_pendant_ws:
+        try:
+            await active_pendant_ws.send_text(json.dumps({"state": state}))
+        except Exception:
+            pass
+    await broadcast("pendant_state", {"state": state})
+
+
+async def send_pendant_text(text: str):
+    """Send text to pendant for OLED display."""
+    if active_pendant_ws:
+        try:
+            await active_pendant_ws.send_text(json.dumps({"text": text[:120]}))
+        except Exception:
+            pass
+
+
+async def on_realtime_event(event: dict):
+    """Handle events from realtime session — broadcast to dashboard + pendant."""
+    if event["event"] == "transcript":
+        await broadcast("transcript", {
+            "speaker": event["speaker"],
+            "text": event["text"],
+            "ts": time.time(),
+        })
+        if event["speaker"] == "ARIA":
+            await send_pendant_text(event["text"])
+    elif event["event"] == "tool_use":
+        await broadcast("tool_use", {
+            "tool": event["tool"],
+            "args": event.get("args", {}),
+            "result": event.get("result", ""),
+            "ts": time.time(),
+        })
+
+
+async def start_session():
+    """Start a realtime session."""
+    global session_task, session_stop_event, ambient_enabled
+    if session_task and not session_task.done():
+        return  # already running
+
+    ambient_enabled = False
+    session_stop_event = asyncio.Event()
+
+    async def run():
+        global ambient_enabled
+        try:
+            await realtime_session(
+                state_callback=send_pendant_state,
+                mic_device="pulse",
+                stop_event=session_stop_event,
+                on_event=on_realtime_event,
+            )
+        except Exception as e:
+            print(f"Realtime failed: {e} — falling back to Claude pipeline")
+            await fallback_pipeline()
+        finally:
+            ambient_enabled = True
+            await send_pendant_state("idle")
+
+    session_task = asyncio.create_task(run())
+
+
+async def stop_session():
+    """Stop the current realtime session."""
+    global session_task, session_stop_event, ambient_enabled
+    if session_stop_event:
+        session_stop_event.set()
+    if session_task:
+        try:
+            await session_task
+        except Exception:
+            pass
+        session_task = None
+    ambient_enabled = True
+
+
+async def fallback_pipeline():
+    """Fallback: record → whisper → Claude → TTS when realtime fails."""
+    print("Running fallback pipeline...")
+    await send_pendant_state("listening")
+    loop = asyncio.get_event_loop()
+    text = await loop.run_in_executor(None, record_and_transcribe)
+    if text and text.strip():
+        print(f"Fallback heard: {text}")
+        save_transcript(text, speaker="User")
+        await broadcast("transcript", {"speaker": "User", "text": text, "ts": time.time()})
+
+        await send_pendant_state("processing")
+        response = await loop.run_in_executor(None, ask, text)
+
+        print(f"Fallback ARIA: {response}")
+        save_transcript(response, speaker="ARIA")
+        await broadcast("transcript", {"speaker": "ARIA", "text": response, "ts": time.time()})
+        await send_pendant_text(response)
+
+        await send_pendant_state("speaking")
+        await loop.run_in_executor(None, speak, response)
+    await send_pendant_state("idle")
+
+
+# ── Ambient listening (24/7) + wake word ─────────────────────────────────────
 
 async def ambient_listen_loop():
-    """Continuously record + transcribe ambient audio in 15s chunks."""
+    """Continuously record + transcribe ambient audio in 15s chunks.
+    Detects wake word 'ARIA' to auto-start a session."""
     print("Ambient listening started — recording environment 24/7")
     loop = asyncio.get_event_loop()
     while True:
@@ -72,12 +183,17 @@ async def ambient_listen_loop():
                 print(f"[Ambient] {text}")
                 save_transcript(text, speaker="Ambient")
                 await broadcast("transcript", {"speaker": "Ambient", "text": text, "ts": time.time()})
+
+                # Wake word detection
+                if "aria" in text.lower() and not (session_task and not session_task.done()):
+                    print("Wake word 'ARIA' detected! Starting session...")
+                    await start_session()
         except Exception as e:
             print(f"Ambient listen error: {e}")
             await asyncio.sleep(5)
 
 
-# ── ESP32 audio WebSocket ─────────────────────────────────────────────────────
+# ── ESP32 audio WebSocket (legacy — raw audio streaming) ─────────────────────
 
 @app.websocket("/ws/audio")
 async def audio_ws(websocket: WebSocket):
@@ -135,26 +251,17 @@ async def audio_ws(websocket: WebSocket):
         print("Pendant disconnected")
 
 
-# ── Pendant control WebSocket (no audio — button only) ───────────────────────
+# ── Pendant control WebSocket ────────────────────────────────────────────────
 
 @app.websocket("/ws/pendant")
 async def pendant_ws(websocket: WebSocket):
     """
-    Pendant connects here. First button press starts a persistent Realtime session.
-    Second button press stops it. Toggle on/off.
+    Pendant connects here. Button press toggles realtime session on/off.
     """
+    global active_pendant_ws
     await websocket.accept()
+    active_pendant_ws = websocket
     print("Pendant connected on /ws/pendant")
-
-    session_task = None
-    stop_event = None
-
-    async def send_state(state: str):
-        try:
-            await websocket.send_text(json.dumps({"state": state}))
-            await broadcast("pendant_state", {"state": state})
-        except Exception:
-            pass
 
     try:
         while True:
@@ -163,42 +270,20 @@ async def pendant_ws(websocket: WebSocket):
 
             if msg.get("event") == "button_press":
                 if session_task and not session_task.done():
-                    # Session running — stop it
                     print("Button pressed — stopping Realtime session")
-                    stop_event.set()
-                    await session_task
-                    session_task = None
-                    global ambient_enabled
-                    ambient_enabled = True
+                    await stop_session()
                 else:
-                    # No session — start one
                     print("Button pressed — starting Realtime session")
-                    ambient_enabled = False
-                    stop_event = asyncio.Event()
-
-                    async def run_session():
-                        try:
-                            await realtime_session(
-                                state_callback=send_state,
-                                mic_device="pulse",
-                                stop_event=stop_event,
-                            )
-                        except Exception as e:
-                            print(f"Realtime session failed: {e}")
-                            await send_state("idle")
-
-                    session_task = asyncio.create_task(run_session())
+                    await start_session()
 
     except WebSocketDisconnect:
         print("Pendant disconnected")
-        if stop_event:
-            stop_event.set()
-        ambient_enabled = True
+        active_pendant_ws = None
+        await stop_session()
     except Exception as e:
         print(f"Pendant handler crashed: {e}")
-        if stop_event:
-            stop_event.set()
-        ambient_enabled = True
+        active_pendant_ws = None
+        await stop_session()
 
 
 # ── Dashboard WebSocket ───────────────────────────────────────────────────────

@@ -135,14 +135,23 @@ You run on a Raspberry Pi 5, connected to an ESP32 pendant with a screen and LED
 - Be proactive — if ambient context is relevant, reference it."""
 
 
-async def realtime_session(state_callback, mic_device="pulse", stop_event: asyncio.Event = None):
+async def realtime_session(state_callback, mic_device="pulse", stop_event: asyncio.Event = None, on_event=None):
     """
     Persistent realtime conversation session.
     Keeps the connection open for multiple back-and-forth turns.
     Set stop_event to signal shutdown from outside.
+    on_event: async callback for broadcasting events to dashboard/pendant.
     """
     all_user = []
     all_assistant = []
+    current_turn_text = ""
+
+    async def emit(event_type, **data):
+        if on_event:
+            try:
+                await on_event({"event": event_type, **data})
+            except Exception:
+                pass
 
     # Start aplay process to stream output audio
     player = subprocess.Popen(
@@ -236,6 +245,7 @@ async def realtime_session(state_callback, mic_device="pulse", stop_event: async
                         print(f"Realtime heard: {transcript}")
                         all_user.append(transcript)
                         save_transcript(transcript, speaker="User")
+                        await emit("transcript", speaker="User", text=transcript)
 
                 elif t in ("response.audio.delta", "response.output_audio.delta"):
                     await state_callback("speaking")
@@ -247,10 +257,7 @@ async def realtime_session(state_callback, mic_device="pulse", stop_event: async
                         pass
 
                 elif t in ("response.audio_transcript.delta", "response.output_audio_transcript.delta"):
-                    # Accumulate current turn's assistant transcript
-                    if not hasattr(realtime_session, '_current_turn'):
-                        realtime_session._current_turn = ""
-                    realtime_session._current_turn += event.get("delta", "")
+                    current_turn_text += event.get("delta", "")
 
                 elif t == "response.output_item.done":
                     item = event.get("item", {})
@@ -265,6 +272,7 @@ async def realtime_session(state_callback, mic_device="pulse", stop_event: async
                         except Exception as e:
                             result = f"Tool error: {e}"
                         print(f"[Result] {str(result)[:120]}")
+                        await emit("tool_use", tool=fn_name, args=fn_args, result=str(result)[:200])
 
                         await ws.send(json.dumps({
                             "type": "conversation.item.create",
@@ -278,13 +286,11 @@ async def realtime_session(state_callback, mic_device="pulse", stop_event: async
 
                 elif t == "response.done":
                     print("Realtime: response complete")
-                    # Save assistant transcript for this turn
-                    turn_text = getattr(realtime_session, '_current_turn', "")
-                    if turn_text.strip():
-                        all_assistant.append(turn_text)
-                        save_transcript(turn_text, speaker="ARIA")
-                    realtime_session._current_turn = ""
-                    # Go back to listening for next turn
+                    if current_turn_text.strip():
+                        all_assistant.append(current_turn_text)
+                        save_transcript(current_turn_text, speaker="ARIA")
+                        await emit("transcript", speaker="ARIA", text=current_turn_text)
+                    current_turn_text = ""
                     await state_callback("listening")
 
                 elif t == "error":

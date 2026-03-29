@@ -70,7 +70,7 @@
     /* ── Main panels ── */
     .panels {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr 1fr 1fr;
       flex: 1;
       gap: 1px;
       overflow: hidden;
@@ -122,10 +122,34 @@
       max-width: 95%;
     }
 
-    .entry.user   .entry-bubble { background: #1e1e3e; color: #c4c4d8; border-bottom-left-radius: 4px; }
-    .entry.aria   .entry-bubble { background: #1a2e2a; color: #a7f3d0; border-bottom-left-radius: 4px; }
-    .entry.user   .entry-speaker { color: #6366f1; font-size: 11px; margin-bottom: 2px; }
-    .entry.aria   .entry-speaker { color: #10b981; font-size: 11px; margin-bottom: 2px; }
+    .entry.user    .entry-bubble { background: #1e1e3e; color: #c4c4d8; border-bottom-left-radius: 4px; }
+    .entry.aria    .entry-bubble { background: #1a2e2a; color: #a7f3d0; border-bottom-left-radius: 4px; }
+    .entry.ambient .entry-bubble { background: #1a1a24; color: #6b7280; border-bottom-left-radius: 4px; font-size: 12px; }
+    .entry.user    .entry-speaker { color: #6366f1; font-size: 11px; margin-bottom: 2px; }
+    .entry.aria    .entry-speaker { color: #10b981; font-size: 11px; margin-bottom: 2px; }
+    .entry.ambient .entry-speaker { color: #374151; font-size: 10px; margin-bottom: 2px; }
+
+    /* ── Tool activity ── */
+    .tool-item {
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      background: #111128;
+      border-left: 3px solid #f59e0b;
+      border-radius: 6px;
+      animation: fadeIn 0.3s ease;
+    }
+    .tool-name { color: #f59e0b; font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; }
+    .tool-args { color: #6b7280; font-size: 11px; margin-top: 4px; font-family: monospace; }
+    .tool-result { color: #9ca3af; font-size: 12px; margin-top: 6px; }
+
+    /* ── Memory items ── */
+    .memory-item {
+      padding: 8px 0;
+      border-bottom: 1px solid #1a1a2e;
+      font-size: 13px;
+    }
+    .memory-key { color: #8b5cf6; font-size: 11px; margin-bottom: 2px; }
+    .memory-val { color: #9ca3af; }
 
     /* ── Chat input ── */
     .chat-input-wrap {
@@ -181,15 +205,6 @@
       50% { transform: scale(1.1); }
     }
 
-    /* ── Memories panel ── */
-    .memory-item {
-      padding: 8px 0;
-      border-bottom: 1px solid #1a1a2e;
-      font-size: 13px;
-    }
-    .memory-key { color: #8b5cf6; font-size: 11px; margin-bottom: 2px; }
-    .memory-val { color: #9ca3af; }
-
     /* ── Glow overlay when speaking ── */
     body.speaking::after {
       content: '';
@@ -224,15 +239,21 @@
     <div class="panel-body" id="transcript-panel"></div>
   </div>
 
-  <!-- Right: conversation + chat -->
+  <!-- Center: conversation + chat -->
   <div class="panel">
     <div class="panel-header">ARIA Conversation</div>
     <div class="panel-body" id="convo-panel"></div>
     <div class="chat-input-wrap">
       <button id="mic-btn" title="Hold to speak">🎤</button>
-      <input id="chat-input" type="text" placeholder="Type or hold 🎤 to speak…" autocomplete="off">
+      <input id="chat-input" type="text" placeholder="Type or hold 🎤 to speak..." autocomplete="off">
       <button id="send-btn">Send</button>
     </div>
+  </div>
+
+  <!-- Right: activity (tools + memories) -->
+  <div class="panel">
+    <div class="panel-header">Activity</div>
+    <div class="panel-body" id="activity-panel"></div>
   </div>
 </div>
 
