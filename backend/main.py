@@ -29,6 +29,8 @@ active_pendant_ws: WebSocket | None = None
 session_task: asyncio.Task | None = None
 session_stop_event: asyncio.Event | None = None
 ambient_enabled = True
+pending_pendant_state: str | None = None   # state to send when pendant reconnects
+pending_pendant_text: str | None = None    # text to send when pendant reconnects
 
 
 @asynccontextmanager
@@ -66,10 +68,11 @@ _last_pendant_state = ""
 
 async def send_pendant_state(state: str):
     """Send state to pendant + dashboard. Debounces duplicate states."""
-    global _last_pendant_state
+    global _last_pendant_state, pending_pendant_state
     if state == _last_pendant_state:
         return
     _last_pendant_state = state
+    pending_pendant_state = state
     if active_pendant_ws:
         try:
             await active_pendant_ws.send_text(json.dumps({"state": state}))
@@ -80,7 +83,9 @@ async def send_pendant_state(state: str):
 
 async def send_pendant_text(text: str):
     """Send text to pendant for OLED display."""
+    global pending_pendant_text
     print(f"Sending text to pendant: {text[:60]}...")
+    pending_pendant_text = text[:120]
     if active_pendant_ws:
         try:
             await active_pendant_ws.send_text(json.dumps({"text": text[:120]}))
@@ -88,7 +93,7 @@ async def send_pendant_text(text: str):
         except Exception as e:
             print(f"Text send failed: {e}")
     else:
-        print("No pendant connected — can't send text")
+        print("No pendant connected — queued for reconnect")
 
 
 async def on_realtime_event(event: dict):
@@ -268,10 +273,22 @@ async def pendant_ws(websocket: WebSocket):
     """
     Pendant connects here. Button press toggles realtime session on/off.
     """
-    global active_pendant_ws
+    global active_pendant_ws, pending_pendant_state, pending_pendant_text
     await websocket.accept()
     active_pendant_ws = websocket
     print("Pendant connected on /ws/pendant")
+
+    # Send any pending state/text from while pendant was disconnected
+    try:
+        if pending_pendant_state:
+            await websocket.send_text(json.dumps({"state": pending_pendant_state}))
+            print(f"Sent pending state: {pending_pendant_state}")
+        if pending_pendant_text:
+            await websocket.send_text(json.dumps({"text": pending_pendant_text}))
+            print(f"Sent pending text: {pending_pendant_text[:40]}...")
+            pending_pendant_text = None
+    except Exception:
+        pass
 
     try:
         while True:
