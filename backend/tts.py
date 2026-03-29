@@ -82,10 +82,20 @@ def _play_audio(path: str) -> None:
 
 
 def _speak_espeak(text: str) -> None:
+    # Strip special chars that break espeak shell parsing
+    clean = text.replace('"', '').replace("'", "").replace('`', '').replace('—', '-')
     try:
-        subprocess.run(["espeak", "-s", "150", text], timeout=15, check=True)
+        subprocess.run(["espeak", "-s", "160", clean], timeout=20, check=True,
+                       stdin=subprocess.DEVNULL)
     except Exception as e:
-        print(f"TTS completely failed: {e}")
+        print(f"espeak failed: {e}")
+        # Last resort: pipe text via stdin to avoid shell quoting issues
+        try:
+            proc = subprocess.Popen(["espeak", "-s", "160", "--stdin"],
+                                     stdin=subprocess.PIPE, timeout=20)
+            proc.communicate(input=clean.encode(), timeout=20)
+        except Exception as e2:
+            print(f"TTS completely failed: {e2}")
 
 
 def clone_voice(audio_path: str, name: str = "ARIA") -> str | None:
