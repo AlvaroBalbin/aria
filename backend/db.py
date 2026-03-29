@@ -39,6 +39,16 @@ def init_db():
             text TEXT    NOT NULL,
             due  REAL
         );
+
+        CREATE TABLE IF NOT EXISTS calendar_events (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts_created  REAL    NOT NULL,
+            title       TEXT    NOT NULL,
+            description TEXT    DEFAULT '',
+            start_time  REAL    NOT NULL,
+            end_time    REAL,
+            all_day     INTEGER DEFAULT 0
+        );
     """)
     conn.commit()
     conn.close()
@@ -113,3 +123,47 @@ def save_reminder(text: str, due: float | None = None):
                  (time.time(), text, due))
     conn.commit()
     conn.close()
+
+
+# ── Calendar ─────────────────────────────────────────────────────────────────
+
+def save_calendar_event(title: str, start_time: float, end_time: float | None = None,
+                        description: str = "", all_day: bool = False) -> int:
+    conn = get_conn()
+    cursor = conn.execute(
+        "INSERT INTO calendar_events (ts_created, title, description, start_time, end_time, all_day) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (time.time(), title, description, start_time, end_time, 1 if all_day else 0)
+    )
+    event_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return event_id
+
+
+def list_calendar_events(from_time: float | None = None, to_time: float | None = None,
+                         limit: int = 20) -> list[dict]:
+    conn = get_conn()
+    if from_time and to_time:
+        rows = conn.execute(
+            "SELECT id, title, description, start_time, end_time, all_day FROM calendar_events "
+            "WHERE start_time >= ? AND start_time <= ? ORDER BY start_time ASC LIMIT ?",
+            (from_time, to_time, limit)
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT id, title, description, start_time, end_time, all_day FROM calendar_events "
+            "WHERE start_time >= ? ORDER BY start_time ASC LIMIT ?",
+            (from_time or time.time(), limit)
+        ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def delete_calendar_event(event_id: int) -> bool:
+    conn = get_conn()
+    cursor = conn.execute("DELETE FROM calendar_events WHERE id = ?", (event_id,))
+    conn.commit()
+    deleted = cursor.rowcount > 0
+    conn.close()
+    return deleted

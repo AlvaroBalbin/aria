@@ -68,6 +68,12 @@ void onWebSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
       else if (strcmp(state, "speaking")   == 0) setState(SPEAKING);
     }
 
+    // Handle server keepalive ping
+    if (doc.containsKey("ping")) {
+      ws.sendTXT("{\"pong\":true}");
+      return;
+    }
+
     // Handle response text for OLED display
     const char* text = doc["text"];
     if (text) {
@@ -120,16 +126,42 @@ void setup() {
 
   ws.begin(PI_HOST, PI_PORT, WS_PATH);
   ws.onEvent(onWebSocketEvent);
-  ws.setReconnectInterval(3000);
+  ws.setReconnectInterval(5000);
+  ws.enableHeartbeat(15000, 3000, 2);  // ping every 15s, timeout 3s, 2 retries
 
   Serial.println("Ready. Tap button to talk.");
 }
 
 unsigned long lastDisplayUpdate = 0;
 unsigned long lastStateChange = 0;
+unsigned long lastWiFiCheck = 0;
 bool buttonWasPressed = false;
 
 void loop() {
+  // WiFi reconnection check every 5 seconds
+  if (millis() - lastWiFiCheck > 5000) {
+    lastWiFiCheck = millis();
+    if (WiFi.status() != WL_CONNECTED) {
+      Serial.println("WiFi lost — reconnecting...");
+      wsConnected = false;
+      showReconnecting();
+      WiFi.disconnect();
+      delay(500);
+      WiFi.begin(WIFI_SSID, WIFI_PASS);
+      unsigned long start = millis();
+      while (WiFi.status() != WL_CONNECTED && millis() - start < 8000) {
+        delay(500);
+        Serial.print(".");
+      }
+      if (WiFi.status() == WL_CONNECTED) {
+        Serial.println("\nWiFi reconnected: " + WiFi.localIP().toString());
+      } else {
+        Serial.println("\nWiFi reconnect failed — will retry");
+        return;
+      }
+    }
+  }
+
   ws.loop();
 
   bool buttonPressed = (digitalRead(BUTTON_PIN) == LOW);

@@ -31,6 +31,7 @@ session_stop_event: asyncio.Event | None = None
 ambient_enabled = True
 pending_pendant_state: str | None = None   # state to send when pendant reconnects
 pending_pendant_text: str | None = None    # text to send when pendant reconnects
+ambient_wake_event = asyncio.Event()       # signals ambient loop to wake up immediately
 
 
 @asynccontextmanager
@@ -145,16 +146,23 @@ async def start_session():
 
 async def stop_session():
     """Stop the current realtime session."""
-    global session_task, session_stop_event, ambient_enabled
+    global session_task, session_stop_event, ambient_enabled, _last_pendant_state
     if session_stop_event:
         session_stop_event.set()
     if session_task:
         try:
-            await session_task
+            await asyncio.wait_for(session_task, timeout=5.0)
+        except asyncio.TimeoutError:
+            session_task.cancel()
+            print("Session task timed out during cleanup — force cancelled")
         except Exception:
             pass
         session_task = None
     ambient_enabled = True
+    ambient_wake_event.set()
+    # Force-broadcast idle regardless of dedup — guarantees dashboard update
+    _last_pendant_state = ""
+    await send_pendant_state("idle")
 
 
 async def fallback_pipeline():
@@ -184,13 +192,17 @@ async def fallback_pipeline():
 # ── Ambient listening (24/7) + wake word ─────────────────────────────────────
 
 async def ambient_listen_loop():
-    """Continuously record + transcribe ambient audio in 15s chunks.
+    """Continuously record + transcribe ambient audio in 5s chunks.
     Detects wake word 'ARIA' to auto-start a session."""
     print("Ambient listening started — recording environment 24/7")
     loop = asyncio.get_event_loop()
     while True:
         if not ambient_enabled:
-            await asyncio.sleep(5)
+            ambient_wake_event.clear()
+            try:
+                await asyncio.wait_for(ambient_wake_event.wait(), timeout=0.5)
+            except asyncio.TimeoutError:
+                pass
             continue
         try:
             text = await loop.run_in_executor(None, record_ambient_chunk)
@@ -272,6 +284,7 @@ async def audio_ws(websocket: WebSocket):
 async def pendant_ws(websocket: WebSocket):
     """
     Pendant connects here. Button press toggles realtime session on/off.
+    Server sends keepalive pings every 20s to prevent silent disconnects.
     """
     global active_pendant_ws, pending_pendant_state, pending_pendant_text
     await websocket.accept()
@@ -290,10 +303,23 @@ async def pendant_ws(websocket: WebSocket):
     except Exception:
         pass
 
+    # Keepalive ping task — prevents silent disconnects on flaky WiFi
+    async def keepalive():
+        while True:
+            await asyncio.sleep(20)
+            try:
+                await websocket.send_text(json.dumps({"ping": True}))
+            except Exception:
+                break
+
+    ka_task = asyncio.create_task(keepalive())
     try:
         while True:
             data = await websocket.receive_text()
             msg = json.loads(data)
+
+            if msg.get("pong"):
+                continue  # keepalive response, ignore
 
             if msg.get("event") == "button_press":
                 if session_task and not session_task.done():
@@ -306,10 +332,11 @@ async def pendant_ws(websocket: WebSocket):
     except WebSocketDisconnect:
         print("Pendant disconnected (session continues if active)")
         active_pendant_ws = None
-        # DON'T stop session — audio goes through headphones, not pendant
     except Exception as e:
         print(f"Pendant handler crashed: {e}")
         active_pendant_ws = None
+    finally:
+        ka_task.cancel()
 
 
 # ── Dashboard WebSocket ───────────────────────────────────────────────────────
@@ -373,6 +400,15 @@ async def toggle_ambient():
     global ambient_enabled
     ambient_enabled = not ambient_enabled
     return {"ambient_enabled": ambient_enabled}
+
+
+@app.get("/calendar")
+async def calendar_endpoint(days: int = 7):
+    from db import list_calendar_events
+    import time as t
+    from_ts = t.time()
+    to_ts = from_ts + days * 86400
+    return list_calendar_events(from_ts, to_ts)
 
 
 # ── Background: check reminders ───────────────────────────────────────────────

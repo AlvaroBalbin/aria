@@ -12,7 +12,7 @@ from config import SAMPLE_RATE, MIC_DEVICE, MIC_DURATION
 
 client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY", ""))
 
-AMBIENT_DURATION = 15  # seconds per ambient chunk
+AMBIENT_DURATION = 5  # seconds per ambient chunk (shorter = faster wake word detection)
 
 
 def _pcm_to_wav(pcm_bytes: bytes, sample_rate: int = SAMPLE_RATE) -> bytes:

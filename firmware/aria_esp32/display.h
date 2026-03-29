@@ -80,6 +80,15 @@ void showResponseText(const String& text) {
 
 static bool showingText = false;  // true when response text is on screen
 
+void showReconnecting() {
+  tft.fillScreen(ST77XX_BLACK);
+  tft.setTextColor(ST77XX_RED);
+  tft.setTextSize(2);
+  tft.setCursor(50, 105);
+  tft.print("Reconnecting...");
+  lastDrawnState = -1;
+}
+
 void updateDisplay(int state) {
   // Don't overwrite response text while speaking
   if (showingText && (state == 3 || state == 2)) return;

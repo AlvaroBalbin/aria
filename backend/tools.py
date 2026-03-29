@@ -3,7 +3,8 @@ Claude/GPT tool implementations for ARIA.
 """
 import datetime
 import httpx
-from db import save_memory, query_memories, get_transcript, save_reminder, get_all_memories
+from db import (save_memory, query_memories, get_transcript, save_reminder, get_all_memories,
+                save_calendar_event, list_calendar_events, delete_calendar_event)
 from config import BRAVE_API_KEY, TWITTER_BEARER_TOKEN
 
 
@@ -113,16 +114,63 @@ def search_x(args: dict) -> str:
         return f"X search failed: {e}"
 
 
+# ── Calendar ─────────────────────────────────────────────────────────────────
+
+def add_calendar_event_tool(args: dict) -> str:
+    title = args["title"]
+    start_str = args["start_time"]
+    end_str = args.get("end_time")
+    description = args.get("description", "")
+    all_day = args.get("all_day", False)
+    try:
+        start_dt = datetime.datetime.fromisoformat(start_str)
+        start_ts = start_dt.timestamp()
+        end_ts = datetime.datetime.fromisoformat(end_str).timestamp() if end_str else None
+    except ValueError as e:
+        return f"Invalid date format: {e}. Use ISO 8601 (e.g., 2026-03-30T14:00:00)."
+    event_id = save_calendar_event(title, start_ts, end_ts, description, all_day)
+    nice_time = start_dt.strftime("%A %B %d at %H:%M")
+    return f"Event '{title}' added for {nice_time} (ID: {event_id})."
+
+
+def list_calendar_events_tool(args: dict) -> str:
+    from_str = args.get("from_time")
+    to_str = args.get("to_time")
+    from_ts = datetime.datetime.fromisoformat(from_str).timestamp() if from_str else None
+    to_ts = datetime.datetime.fromisoformat(to_str).timestamp() if to_str else None
+    events = list_calendar_events(from_ts, to_ts)
+    if not events:
+        return "No upcoming events found."
+    lines = []
+    for e in events:
+        dt = datetime.datetime.fromtimestamp(e["start_time"])
+        time_str = dt.strftime("%a %b %d %H:%M")
+        lines.append(f"- [{e['id']}] {time_str}: {e['title']}")
+        if e.get("description"):
+            lines.append(f"  {e['description']}")
+    return "\n".join(lines)
+
+
+def delete_calendar_event_tool(args: dict) -> str:
+    event_id = args["event_id"]
+    if delete_calendar_event(event_id):
+        return f"Event {event_id} deleted."
+    return f"Event {event_id} not found."
+
+
 # ── Dispatch map ──────────────────────────────────────────────────────────────
 
 TOOL_MAP = {
-    "search_web":      search_web,
-    "save_memory":     save_memory_tool,
-    "query_memories":  query_memories_tool,
-    "get_transcript":  get_transcript_tool,
-    "set_reminder":    set_reminder_tool,
-    "get_datetime":    get_datetime_tool,
-    "search_x":        search_x,
+    "search_web":           search_web,
+    "save_memory":          save_memory_tool,
+    "query_memories":       query_memories_tool,
+    "get_transcript":       get_transcript_tool,
+    "set_reminder":         set_reminder_tool,
+    "get_datetime":         get_datetime_tool,
+    "search_x":             search_x,
+    "add_calendar_event":   add_calendar_event_tool,
+    "list_calendar_events": list_calendar_events_tool,
+    "delete_calendar_event": delete_calendar_event_tool,
 }
 
 
@@ -169,4 +217,22 @@ OPENAI_TOOL_SCHEMAS = [
 
     _fn("search_x", "Search X/Twitter for the latest real-time tweets and news on any topic.",
         {"query": {"type": "string", "description": "Topic to search on X, e.g. 'AI news', 'Bath Hackathon'"}}, ["query"]),
+
+    _fn("add_calendar_event", "Add a calendar event for the user.",
+        {
+            "title":       {"type": "string", "description": "Event title"},
+            "start_time":  {"type": "string", "description": "Start time in ISO 8601 (e.g., 2026-03-30T14:00:00)"},
+            "end_time":    {"type": "string", "description": "End time in ISO 8601 (optional)"},
+            "description": {"type": "string", "description": "Additional details (optional)"},
+            "all_day":     {"type": "boolean", "description": "True if all-day event"},
+        }, ["title", "start_time"]),
+
+    _fn("list_calendar_events", "List upcoming calendar events for the user.",
+        {
+            "from_time": {"type": "string", "description": "Start of range in ISO 8601 (optional, defaults to now)"},
+            "to_time":   {"type": "string", "description": "End of range in ISO 8601 (optional)"},
+        }, []),
+
+    _fn("delete_calendar_event", "Delete a calendar event by its ID.",
+        {"event_id": {"type": "integer", "description": "The event ID to delete"}}, ["event_id"]),
 ]

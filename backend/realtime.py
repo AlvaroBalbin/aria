@@ -94,6 +94,47 @@ RT_TOOLS = [
             "required": ["query"],
         },
     },
+    {
+        "type": "function",
+        "name": "add_calendar_event",
+        "description": "Add a calendar event for the user.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "title":       {"type": "string", "description": "Event title"},
+                "start_time":  {"type": "string", "description": "Start time in ISO 8601 (e.g., 2026-03-30T14:00:00)"},
+                "end_time":    {"type": "string", "description": "End time in ISO 8601 (optional)"},
+                "description": {"type": "string", "description": "Additional details (optional)"},
+                "all_day":     {"type": "boolean", "description": "True if all-day event"},
+            },
+            "required": ["title", "start_time"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "list_calendar_events",
+        "description": "List upcoming calendar events.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "from_time": {"type": "string", "description": "Start of range in ISO 8601 (optional)"},
+                "to_time":   {"type": "string", "description": "End of range in ISO 8601 (optional)"},
+            },
+            "required": [],
+        },
+    },
+    {
+        "type": "function",
+        "name": "delete_calendar_event",
+        "description": "Delete a calendar event by ID.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "event_id": {"type": "integer", "description": "Event ID to delete"},
+            },
+            "required": ["event_id"],
+        },
+    },
 ]
 
 
@@ -126,6 +167,7 @@ You hear everything through their AirPods and speak back through them.
 - Remember things about {USER_NAME} permanently
 - Hear ambient conversation and reference it
 - Set reminders, check the time
+- Manage calendar events (add, list, delete)
 
 ## Context
 You're at the Bath Hackathon 2026. {USER_NAME} built you as their hackathon project.
